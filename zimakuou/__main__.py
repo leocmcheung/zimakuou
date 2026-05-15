@@ -20,8 +20,19 @@ def main():
         default=None,
         help="LLM model id (MLX) or GGUF path (llama.cpp). Defaults per platform.",
     )
+    parser.add_argument(
+        "--context",
+        type=Path,
+        default=None,
+        help="Optional YAML with synopsis, characters, glossary (see CLAUDE.md)",
+    )
     args = parser.parse_args()
-    run(args.video, asr_model=args.asr_model, llm_model=args.llm)
+    run(
+        args.video,
+        asr_model=args.asr_model,
+        llm_model=args.llm,
+        context_path=args.context,
+    )
 
 
 if __name__ == "__main__":

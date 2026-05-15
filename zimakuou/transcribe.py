@@ -13,13 +13,18 @@ def _is_apple_silicon() -> bool:
     return sys.platform == "darwin" and platform.machine() == "arm64"
 
 
-def transcribe(audio: Path, model_id: str | None = None) -> list[srt.Subtitle]:
+def transcribe(
+    audio: Path,
+    model_id: str | None = None,
+    initial_prompt: str | None = None,
+) -> list[srt.Subtitle]:
     """Transcribe Japanese audio. Picks MLX (Metal GPU) on Apple Silicon,
-    faster-whisper (CT2) elsewhere."""
+    faster-whisper (CT2) elsewhere. `initial_prompt` biases the decoder
+    toward show-specific names / terms."""
     if _is_apple_silicon():
-        segs = _transcribe_mlx(audio, model_id or DEFAULT_MLX_MODEL)
+        segs = _transcribe_mlx(audio, model_id or DEFAULT_MLX_MODEL, initial_prompt)
     else:
-        segs = _transcribe_ct2(audio, model_id or DEFAULT_CT2_MODEL)
+        segs = _transcribe_ct2(audio, model_id or DEFAULT_CT2_MODEL, initial_prompt)
 
     return [
         srt.Subtitle(
@@ -32,7 +37,9 @@ def transcribe(audio: Path, model_id: str | None = None) -> list[srt.Subtitle]:
     ]
 
 
-def _transcribe_mlx(audio: Path, model_id: str) -> list[tuple[float, float, str]]:
+def _transcribe_mlx(
+    audio: Path, model_id: str, initial_prompt: str | None
+) -> list[tuple[float, float, str]]:
     import mlx_whisper
 
     result = mlx_whisper.transcribe(
@@ -40,6 +47,7 @@ def _transcribe_mlx(audio: Path, model_id: str) -> list[tuple[float, float, str]
         path_or_hf_repo=model_id,
         language="ja",
         word_timestamps=False,
+        initial_prompt=initial_prompt or None,
     )
     out = []
     for seg in result["segments"]:
@@ -49,7 +57,9 @@ def _transcribe_mlx(audio: Path, model_id: str) -> list[tuple[float, float, str]
     return out
 
 
-def _transcribe_ct2(audio: Path, model_id: str) -> list[tuple[float, float, str]]:
+def _transcribe_ct2(
+    audio: Path, model_id: str, initial_prompt: str | None
+) -> list[tuple[float, float, str]]:
     from faster_whisper import WhisperModel
 
     device, compute_type = _ct2_device()
@@ -59,6 +69,7 @@ def _transcribe_ct2(audio: Path, model_id: str) -> list[tuple[float, float, str]
         language="ja",
         beam_size=5,
         vad_filter=True,
+        initial_prompt=initial_prompt or None,
     )
     out = []
     for seg in segments:
@@ -86,8 +97,13 @@ if __name__ == "__main__":
     p.add_argument("audio", type=Path)
     p.add_argument("--model", default=None, help="MLX or CT2 HF repo / local path")
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument("--context", type=Path, default=None, help="Context YAML for initial_prompt")
     args = p.parse_args()
     out = args.out or args.audio.with_suffix(".jp.srt")
-    subs = transcribe(args.audio, args.model)
+    prompt = None
+    if args.context:
+        from .context import Context
+        prompt = Context.load(args.context).whisper_initial_prompt() or None
+    subs = transcribe(args.audio, args.model, initial_prompt=prompt)
     write_srt(subs, out)
     print(f"Wrote {out} ({len(subs)} cues)")

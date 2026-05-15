@@ -8,6 +8,14 @@ SYSTEM = (
 )
 
 
+def build_system(context_block: str = "") -> str:
+    """Append a context block (synopsis / glossary / characters) to the
+    base system prompt. Empty block returns SYSTEM unchanged."""
+    if not context_block:
+        return SYSTEM
+    return f"{SYSTEM}\n\n参考情報:\n{context_block}"
+
+
 def build_prompt(text: str, context: list[str]) -> str:
     if not context:
         return f"Translate this line to Traditional Chinese:\n{text}"

@@ -48,10 +48,31 @@ pip install -r requirements.txt
 # run end-to-end
 python -m zimakuou path/to/video.mkv
 
-# stage-by-stage (each stage is independently runnable)
+# with show-specific context (recommended — improves both ASR and translation)
+python -m zimakuou path/to/video.mkv --context path/to/show.context.yaml
+
+# stage-by-stage (each stage is independently runnable, both accept --context)
 python -m zimakuou.transcribe path/to/audio.wav      # → jp.srt
 python -m zimakuou.translate  path/to/file.jp.srt    # → zh-tw.srt + bilingual.srt
 ```
+
+### Context YAML schema
+
+All fields optional. Used in three places: whisper `initial_prompt` (biases ASR toward show vocab), LLM system prompt (synopsis + glossary), and a post-translation find/replace enforcing canonical glossary terms.
+
+```yaml
+title: 悟の恋
+title_zh_tw: 慧的愛戀
+synopsis: |
+  A boy with mind-reading powers ("スペック") falls for a girl who can read his thoughts back.
+characters: [悟, 美咲, ミミ, 水島]
+glossary:
+  - { jp: スペック,   zh: 讀心能力, note: protagonist's ability }
+  - { jp: サトリマス, zh: 我懂了 }
+  - { jp: ミミ,        zh: 咪咪 }
+```
+
+Whisper's `initial_prompt` budget is ~224 tokens — only the JP side of `characters` + `glossary` is sent, capped at 200 chars. The full block (synopsis + glossary table) goes into the LLM system prompt, which has no practical cap.
 
 ### Tests
 
