@@ -9,7 +9,7 @@ from .translate import translate_subs
 
 def run(
     video: Path,
-    asr_model: str = "litagin/anime-whisper",
+    asr_model: str | None = None,
     llm_model: str | None = None,
 ) -> tuple[Path, Path, Path]:
     stem = video.with_suffix("")
@@ -22,7 +22,7 @@ def run(
         print(f"[1/3] extracting audio → {wav.name}")
         extract_audio(video, wav)
 
-        print(f"[2/3] transcribing with {asr_model}")
+        print(f"[2/3] transcribing (asr_model={asr_model or 'default'})")
         jp_subs = transcribe(wav, asr_model)
         write_srt(jp_subs, jp_path)
         print(f"      wrote {jp_path.name} ({len(jp_subs)} cues)")

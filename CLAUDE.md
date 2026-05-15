@@ -2,10 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status
-
-Greenfield. The repo is currently empty; this document describes the intended architecture so the first implementation lands consistently.
-
 ## Goal
 
 Pipeline that takes an anime video file and produces Japanese + Traditional Chinese subtitles:
@@ -13,7 +9,7 @@ Pipeline that takes an anime video file and produces Japanese + Traditional Chin
 ```
 video (mp4/mkv) → ffmpeg → audio (wav 16kHz mono)
                               ↓
-                       anime-whisper (HF: litagin/anime-whisper)
+                       whisper (MLX on macOS / faster-whisper CT2 on Windows)
                               ↓
                        Japanese SRT cues
                               ↓
@@ -26,12 +22,16 @@ video (mp4/mkv) → ffmpeg → audio (wav 16kHz mono)
 
 ## Stack & conventions
 
-- **Python**, dependencies pinned in `requirements.txt` (pip, not uv/poetry).
-- **ASR model**: `litagin/anime-whisper` from Hugging Face — a whisper-large-v3 finetune on anime dialogue. Load via `transformers` `pipeline("automatic-speech-recognition", ...)` with `return_timestamps=True` so SRT cues get accurate boundaries.
-- **Audio extraction**: shell out to `ffmpeg` (must be on PATH). Target 16kHz mono WAV — anime-whisper expects whisper-format input.
-- **Translation LLM** is platform-split — keep this behind a single `Translator` interface so the pipeline doesn't branch:
-  - **macOS (Apple Silicon)**: `mlx-lm` with an MLX-quantized model (e.g. a Qwen2.5 or similar JP→ZH-capable instruct model from `mlx-community`).
-  - **Windows**: `llama-cpp-python` loading a GGUF quant of the same model family.
+- **Python**, dependencies pinned in `requirements.txt` (pip, not uv/poetry). Project venv is a pyenv-virtualenv called `zimakuou` (pinned in `.python-version`).
+- **ASR is platform-split** in `zimakuou/transcribe.py`, same pattern as the translator:
+  - **macOS (Apple Silicon)**: `mlx-whisper` — Metal GPU, fastest on this hardware. Default model `mlx-community/whisper-large-v3-mlx`.
+  - **Windows / non-Apple**: `faster-whisper` (CTranslate2). Default `Systran/faster-whisper-large-v3`. CT2 has no Metal backend, so on Mac it'd be CPU-only — that's why we don't use it here.
+  - Lazy import inside the chosen branch so the wrong-platform package never has to be installed.
+  - We previously tried `litagin/anime-whisper` via `transformers` + MPS. It had two problems: (1) `chunk_length_s=30` returns one mega-chunk with `(None, None)` timestamps for seq2seq Whisper, and (2) anime-whisper hallucinated badly on BGM-heavy mixes. Both fixed by moving to MLX whisper with VAD-friendly defaults.
+- **Audio extraction**: shell out to `ffmpeg` (must be on PATH). Target 16kHz mono WAV.
+- **Translation LLM** is also platform-split, behind a single `Translator` interface in `zimakuou/translators/`:
+  - **macOS (Apple Silicon)**: `mlx-lm` with an MLX-quantized model (default `mlx-community/Qwen2.5-7B-Instruct-4bit`).
+  - **Windows**: `llama-cpp-python` loading a GGUF quant — must pass `--llm <path-to.gguf>`, no auto-download.
   - Detect platform at startup (`sys.platform` + `platform.machine()`) and instantiate the right backend. Don't import both unconditionally — both have heavy native deps that fail to install on the wrong OS.
 - **Translation prompt**: translate Japanese → Traditional Chinese (zh-TW / 繁體中文, *not* Simplified). Translate cue-by-cue but pass a sliding window of prior cues as context so pronouns and honorifics stay coherent. Preserve cue indices and timestamps verbatim — the LLM must never reorder or merge cues.
 - **Output**: emit three files alongside the input video:
@@ -66,8 +66,10 @@ The smoke suite avoids loading the real ASR / LLM models. `tests/test_translate.
 
 ## Things that will bite
 
-- **Hugging Face model download**: `litagin/anime-whisper` is multi-GB. Cache it (`HF_HOME` / `~/.cache/huggingface`) and don't re-download on every run.
-- **Whisper hallucinations**: anime-whisper is better than vanilla whisper on anime but still hallucinates on silence/music. Filter cues with suspiciously long durations or repeated tokens before translating.
-- **MLX vs llama.cpp output drift**: same model, different quantization → slightly different translations. Acceptable, but don't write tests that assert exact translation strings.
-- **SRT timestamp format**: `HH:MM:SS,mmm` with a comma, not a period. Use a library (`srt`, `pysrt`) rather than hand-rolling.
-- **Traditional vs Simplified**: many open models default to Simplified Chinese even when asked for Traditional. Pin this in the system prompt and consider post-processing with OpenCC (`opencc-python-reimplemented`, `s2twp.json` config) as a safety net.
+- **HF model downloads** are multi-GB and only happen on first use, then cache to `~/.cache/huggingface`.
+- **Whisper hallucinations on BGM**: even with VAD enabled, dense music tracks can produce repeated phrases ("ピピピピピ") or collapsed timestamps. If you see a single cue with a wall of text and a sub-second duration, the model lost timestamp prediction.
+- **MLX whisper rounds timestamps to whole seconds** by default — fine for subtitles but don't assume word-level precision.
+- **No `chunk_length_s` with seq2seq Whisper** — it returns one chunk with `(None, None)` timestamps. Whisper's built-in long-form handles >30s audio.
+- **MLX vs llama.cpp output drift**: same LLM weights, different quantization → slightly different translations. Don't write tests that assert exact translation strings.
+- **Traditional vs Simplified**: many open models leak Simplified Chinese even when asked for Traditional. Pin this in the system prompt + post-process with OpenCC (`s2twp` config) as a safety net.
+- **SRT timestamp format**: `HH:MM:SS,mmm` with a comma, not a period. Use the `srt` library — never hand-roll.

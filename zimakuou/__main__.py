@@ -12,8 +12,8 @@ def main():
     parser.add_argument("video", type=Path, help="Input video file (mp4/mkv)")
     parser.add_argument(
         "--asr-model",
-        default="litagin/anime-whisper",
-        help="HuggingFace ASR model id",
+        default=None,
+        help="ASR model id (defaults to MLX whisper-large-v3 on Mac, CT2 on Windows)",
     )
     parser.add_argument(
         "--llm",

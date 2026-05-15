@@ -1,51 +1,81 @@
+import platform
+import sys
 from datetime import timedelta
 from pathlib import Path
 
 import srt
 
-
-def _best_device():
-    import torch
-    if torch.cuda.is_available():
-        return "cuda", torch.float16
-    if torch.backends.mps.is_available():
-        return "mps", torch.float16
-    return "cpu", torch.float32
+DEFAULT_MLX_MODEL = "mlx-community/whisper-large-v3-mlx"
+DEFAULT_CT2_MODEL = "Systran/faster-whisper-large-v3"
 
 
-def transcribe(audio: Path, model_id: str = "litagin/anime-whisper") -> list[srt.Subtitle]:
-    from transformers import pipeline
+def _is_apple_silicon() -> bool:
+    return sys.platform == "darwin" and platform.machine() == "arm64"
 
-    device, dtype = _best_device()
-    # NB: do NOT pass chunk_length_s — for seq2seq Whisper it returns one
-    # mega-chunk with (None, None) timestamps. Whisper's built-in long-form
-    # transcription handles >30s audio correctly with per-segment timestamps.
-    pipe = pipeline(
-        "automatic-speech-recognition",
-        model=model_id,
-        return_timestamps=True,
-        device=device,
-        torch_dtype=dtype,
-    )
-    result = pipe(str(audio), return_timestamps=True, generate_kwargs={"language": "ja"})
 
-    subs: list[srt.Subtitle] = []
-    for i, chunk in enumerate(result["chunks"], start=1):
-        start, end = chunk["timestamp"]
-        if start is None or end is None:
-            continue
-        text = chunk["text"].strip()
-        if not text:
-            continue
-        subs.append(
-            srt.Subtitle(
-                index=i,
-                start=timedelta(seconds=start),
-                end=timedelta(seconds=end),
-                content=text,
-            )
+def transcribe(audio: Path, model_id: str | None = None) -> list[srt.Subtitle]:
+    """Transcribe Japanese audio. Picks MLX (Metal GPU) on Apple Silicon,
+    faster-whisper (CT2) elsewhere."""
+    if _is_apple_silicon():
+        segs = _transcribe_mlx(audio, model_id or DEFAULT_MLX_MODEL)
+    else:
+        segs = _transcribe_ct2(audio, model_id or DEFAULT_CT2_MODEL)
+
+    return [
+        srt.Subtitle(
+            index=i,
+            start=timedelta(seconds=start),
+            end=timedelta(seconds=end),
+            content=text,
         )
-    return subs
+        for i, (start, end, text) in enumerate(segs, start=1)
+    ]
+
+
+def _transcribe_mlx(audio: Path, model_id: str) -> list[tuple[float, float, str]]:
+    import mlx_whisper
+
+    result = mlx_whisper.transcribe(
+        str(audio),
+        path_or_hf_repo=model_id,
+        language="ja",
+        word_timestamps=False,
+    )
+    out = []
+    for seg in result["segments"]:
+        text = seg["text"].strip()
+        if text:
+            out.append((float(seg["start"]), float(seg["end"]), text))
+    return out
+
+
+def _transcribe_ct2(audio: Path, model_id: str) -> list[tuple[float, float, str]]:
+    from faster_whisper import WhisperModel
+
+    device, compute_type = _ct2_device()
+    model = WhisperModel(model_id, device=device, compute_type=compute_type)
+    segments, _info = model.transcribe(
+        str(audio),
+        language="ja",
+        beam_size=5,
+        vad_filter=True,
+    )
+    out = []
+    for seg in segments:
+        text = seg.text.strip()
+        if text:
+            out.append((float(seg.start), float(seg.end), text))
+    return out
+
+
+def _ct2_device() -> tuple[str, str]:
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda", "float16"
+    except Exception:
+        pass
+    return "cpu", "int8"
 
 
 if __name__ == "__main__":
@@ -54,7 +84,7 @@ if __name__ == "__main__":
 
     p = argparse.ArgumentParser()
     p.add_argument("audio", type=Path)
-    p.add_argument("--model", default="litagin/anime-whisper")
+    p.add_argument("--model", default=None, help="MLX or CT2 HF repo / local path")
     p.add_argument("--out", type=Path, default=None)
     args = p.parse_args()
     out = args.out or args.audio.with_suffix(".jp.srt")
