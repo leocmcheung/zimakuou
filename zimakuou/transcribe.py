@@ -4,14 +4,28 @@ from pathlib import Path
 import srt
 
 
+def _best_device():
+    import torch
+    if torch.cuda.is_available():
+        return "cuda", torch.float16
+    if torch.backends.mps.is_available():
+        return "mps", torch.float16
+    return "cpu", torch.float32
+
+
 def transcribe(audio: Path, model_id: str = "litagin/anime-whisper") -> list[srt.Subtitle]:
     from transformers import pipeline
 
+    device, dtype = _best_device()
+    # NB: do NOT pass chunk_length_s — for seq2seq Whisper it returns one
+    # mega-chunk with (None, None) timestamps. Whisper's built-in long-form
+    # transcription handles >30s audio correctly with per-segment timestamps.
     pipe = pipeline(
         "automatic-speech-recognition",
         model=model_id,
-        chunk_length_s=30,
         return_timestamps=True,
+        device=device,
+        torch_dtype=dtype,
     )
     result = pipe(str(audio), return_timestamps=True, generate_kwargs={"language": "ja"})
 
