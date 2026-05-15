@@ -43,6 +43,7 @@ def translate_subs(
 
 if __name__ == "__main__":
     import argparse
+    from .audit import write_glossary_draft
     from .srt_writer import write_bilingual, write_srt
 
     p = argparse.ArgumentParser()
@@ -52,7 +53,7 @@ if __name__ == "__main__":
     args = p.parse_args()
 
     jp_subs = list(srt.parse(args.jp_srt.read_text(encoding="utf-8")))
-    ctx = Context.load(args.context) if args.context else None
+    ctx = Context.load(args.context) if args.context else Context.empty()
     zh_subs = translate_subs(jp_subs, args.llm, ctx=ctx)
 
     stem = args.jp_srt.with_suffix("").with_suffix("")  # strip .jp.srt
@@ -61,3 +62,11 @@ if __name__ == "__main__":
     write_srt(zh_subs, zh_path)
     write_bilingual(jp_subs, zh_subs, bi_path)
     print(f"Wrote {zh_path} and {bi_path}")
+
+    draft_path = Path(f"{stem}.context.draft.yaml")
+    if write_glossary_draft(jp_subs, draft_path, ctx):
+        print(
+            f"[audit] drafted glossary candidates → {draft_path.name}\n"
+            f"        fill in zh:, rename to .context.yaml, re-run with "
+            f"--context to improve terminology."
+        )

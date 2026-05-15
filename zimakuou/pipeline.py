@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 
 from .audio import extract_audio
+from .audit import write_glossary_draft
 from .context import Context
 from .srt_writer import write_bilingual, write_srt
 from .transcribe import transcribe
@@ -41,5 +42,13 @@ def run(
     write_srt(zh_subs, zh_path)
     write_bilingual(jp_subs, zh_subs, bi_path)
     print(f"      wrote {zh_path.name} and {bi_path.name}")
+
+    draft_path = Path(f"{stem}.context.draft.yaml")
+    if write_glossary_draft(jp_subs, draft_path, ctx):
+        print(
+            f"[audit] drafted glossary candidates → {draft_path.name}\n"
+            f"        fill in zh:, rename to .context.yaml, re-run translate "
+            f"with --context to improve terminology."
+        )
 
     return jp_path, zh_path, bi_path
