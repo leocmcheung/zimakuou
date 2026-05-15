@@ -1,5 +1,6 @@
 import platform
 import sys
+from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
@@ -11,6 +12,28 @@ DEFAULT_CT2_MODEL = "Systran/faster-whisper-large-v3"
 
 def _is_apple_silicon() -> bool:
     return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+def is_runaway(text: str, duration: float) -> bool:
+    """Detect classic Whisper failure modes worth dropping:
+
+    1. **Stuck-loop cue** — a long timestamp window with very little text
+       (e.g. 30s of audio rendered as one 8-char string). Real Japanese
+       speech runs ~3-15 chars/sec, so anything below ~1 char/sec over
+       a multi-second window is the model getting stuck.
+    2. **Repeated-character noise** — e.g. "ほほほほほ..." or "ピピピピ...".
+       If a single character makes up >50% of a long string, it's noise.
+    """
+    text = text.strip()
+    if not text:
+        return True
+    if duration > 5.0 and len(text) / duration < 1.0:
+        return True
+    if len(text) > 20:
+        most_common_count = Counter(text).most_common(1)[0][1]
+        if most_common_count / len(text) > 0.5:
+            return True
+    return False
 
 
 def transcribe(
@@ -51,9 +74,10 @@ def _transcribe_mlx(
     )
     out = []
     for seg in result["segments"]:
+        start, end = float(seg["start"]), float(seg["end"])
         text = seg["text"].strip()
-        if text:
-            out.append((float(seg["start"]), float(seg["end"]), text))
+        if not is_runaway(text, end - start):
+            out.append((start, end, text))
     return out
 
 
@@ -73,9 +97,10 @@ def _transcribe_ct2(
     )
     out = []
     for seg in segments:
+        start, end = float(seg.start), float(seg.end)
         text = seg.text.strip()
-        if text:
-            out.append((float(seg.start), float(seg.end), text))
+        if not is_runaway(text, end - start):
+            out.append((start, end, text))
     return out
 
 
