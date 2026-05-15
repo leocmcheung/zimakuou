@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.DS_Store
+
+# Generated artifacts — keep test fixtures elsewhere
+*.wav
+*.mp4
+*.mkv
+*.srt
+
+# Model caches (huggingface defaults to ~/.cache, but in case anyone overrides)
+models/
+.cache/

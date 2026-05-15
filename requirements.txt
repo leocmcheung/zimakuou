@@ -1,0 +1,12 @@
+transformers>=4.45.0
+torch
+accelerate
+srt>=3.5.0
+opencc-python-reimplemented>=0.1.7
+huggingface_hub>=0.24.0
+
+# Apple Silicon backend
+mlx-lm>=0.18.0; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Windows backend (provide a GGUF model path via --llm)
+llama-cpp-python>=0.3.0; sys_platform == "win32"
