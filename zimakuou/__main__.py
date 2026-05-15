@@ -18,7 +18,10 @@ def main():
     parser.add_argument(
         "--llm",
         default=None,
-        help="LLM model id (MLX) or GGUF path (llama.cpp). Defaults per platform.",
+        help=(
+            "Translator: GGUF file path, HF GGUF repo id, or an MLX repo id. "
+            "Defaults to SakuraLLM/Sakura-14B-Qwen2.5-v1.0-GGUF (auto-downloads)."
+        ),
     )
     parser.add_argument(
         "--context",

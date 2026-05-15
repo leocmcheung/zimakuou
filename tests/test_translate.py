@@ -29,7 +29,7 @@ def _sub(i: int, start: float, end: float, text: str) -> srt.Subtitle:
 
 def test_translate_preserves_indices_and_timing(monkeypatch):
     stub = StubTranslator()
-    monkeypatch.setattr(translate_mod, "get_translator", lambda _llm, system=None: stub)
+    monkeypatch.setattr(translate_mod, "get_translator", lambda _llm, *, ctx=None: stub)
 
     jp = [_sub(1, 0.0, 1.0, "あ"), _sub(2, 1.0, 2.0, "い")]
     zh = translate_mod.translate_subs(jp)
@@ -41,7 +41,7 @@ def test_translate_preserves_indices_and_timing(monkeypatch):
 
 def test_opencc_safety_net_converts_simplified_to_traditional(monkeypatch):
     stub = StubTranslator()
-    monkeypatch.setattr(translate_mod, "get_translator", lambda _llm, system=None: stub)
+    monkeypatch.setattr(translate_mod, "get_translator", lambda _llm, *, ctx=None: stub)
 
     jp = [_sub(1, 0.0, 1.0, "あ")]
     zh = translate_mod.translate_subs(jp)
@@ -60,7 +60,7 @@ def test_context_glossary_is_applied_post_translation(monkeypatch):
             return f"我喜歡ミミ"  # leaks "ミミ" untranslated
 
     monkeypatch.setattr(
-        translate_mod, "get_translator", lambda _llm, system=None: LeakyTranslator()
+        translate_mod, "get_translator", lambda _llm, *, ctx=None: LeakyTranslator()
     )
 
     ctx = Context(glossary=[GlossaryEntry(jp="ミミ", zh="咪咪")])
@@ -72,13 +72,16 @@ def test_context_glossary_is_applied_post_translation(monkeypatch):
     assert "ミミ" not in zh[0].content
 
 
-def test_context_system_prompt_is_threaded_to_translator(monkeypatch):
+def test_context_is_threaded_to_translator(monkeypatch):
+    """translate_subs must pass the Context through to get_translator so the
+    backend can render it into its native prompt format (generic system block
+    vs Sakura gpt_dict)."""
     from zimakuou.context import Context, GlossaryEntry
 
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
-    def fake_get_translator(_llm, system=None):
-        captured["system"] = system or ""
+    def fake_get_translator(_llm, *, ctx=None):
+        captured["ctx"] = ctx
         return StubTranslator()
 
     monkeypatch.setattr(translate_mod, "get_translator", fake_get_translator)
@@ -89,13 +92,14 @@ def test_context_system_prompt_is_threaded_to_translator(monkeypatch):
     )
     translate_mod.translate_subs([_sub(1, 0.0, 1.0, "あ")], ctx=ctx)
 
-    assert "A boy reads minds" in captured["system"]
-    assert "サトリ" in captured["system"]
+    passed = captured["ctx"]
+    assert passed.synopsis == "A boy reads minds."
+    assert passed.glossary[0].jp == "サトリ"
 
 
 def test_translator_receives_sliding_history(monkeypatch):
     stub = StubTranslator()
-    monkeypatch.setattr(translate_mod, "get_translator", lambda _llm, system=None: stub)
+    monkeypatch.setattr(translate_mod, "get_translator", lambda _llm, *, ctx=None: stub)
 
     jp = [_sub(i + 1, float(i), float(i + 1), f"line{i}") for i in range(3)]
     translate_mod.translate_subs(jp)

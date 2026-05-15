@@ -5,7 +5,6 @@ import srt
 
 from .context import Context
 from .translators import get_translator
-from .translators._prompt import build_system
 
 
 def translate_subs(
@@ -16,16 +15,17 @@ def translate_subs(
     """Translate cue-by-cue. Each cue gets a sliding window of prior cues
     as context to keep pronouns / honorifics coherent.
 
-    `ctx` injects show-specific synopsis / characters / glossary into the
-    LLM system prompt and runs a post-pass enforcing canonical glossary
-    translations."""
+    `ctx` (synopsis / characters / glossary) is threaded into the backend's
+    native prompt format inside get_translator. A post-pass with OpenCC
+    and a glossary substitution catches Simplified leakage and missed
+    glossary terms."""
     from opencc import OpenCC
 
     ctx = ctx or Context.empty()
-    system = build_system(ctx.llm_context_block())
-    translator = get_translator(llm_model, system=system)
+    translator = get_translator(llm_model, ctx=ctx)
     # Safety net: many models leak Simplified characters even when asked for
-    # Traditional. s2twp = Simplified → Traditional (Taiwan) with phrase mapping.
+    # Traditional, and Sakura is *trained* to emit Simplified — OpenCC s2twp
+    # normalises everything to Traditional (Taiwan) with phrase mapping.
     cc = OpenCC("s2twp")
 
     out: list[srt.Subtitle] = []

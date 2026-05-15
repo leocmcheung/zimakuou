@@ -3,10 +3,15 @@ opencc-python-reimplemented>=0.1.7
 huggingface_hub>=0.24.0
 pyyaml>=6.0
 
-# Apple Silicon: MLX-native whisper + LLM (Metal GPU + unified memory)
+# Apple Silicon: MLX-native whisper for ASR + MLX-lm kept as an optional
+# alternative for non-GGUF LLMs (the default LLM is now a Sakura GGUF, served
+# through llama-cpp-python with Metal — see translators/__init__.py).
 mlx-whisper>=0.4.0; sys_platform == "darwin" and platform_machine == "arm64"
 mlx-lm>=0.18.0;     sys_platform == "darwin" and platform_machine == "arm64"
 
-# Windows: faster-whisper for ASR + llama.cpp for translation
+# Windows: faster-whisper for ASR.
 faster-whisper>=1.0.3; sys_platform == "win32"
-llama-cpp-python>=0.3.0; sys_platform == "win32"
+
+# llama.cpp serves the Sakura GGUF on both platforms. Builds with Metal on
+# macOS and CUDA/CPU on Windows by default.
+llama-cpp-python>=0.3.0
