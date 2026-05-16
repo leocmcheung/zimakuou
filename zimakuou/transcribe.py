@@ -65,12 +65,16 @@ def _transcribe_mlx(
 ) -> list[tuple[float, float, str]]:
     import mlx_whisper
 
+    # mlx-whisper has an internal tqdm frame-progress bar, but it's only
+    # shown when verbose is explicitly False (verbose=None → no bar AND
+    # no text; verbose=True → text segments instead of a bar).
     result = mlx_whisper.transcribe(
         str(audio),
         path_or_hf_repo=model_id,
         language="ja",
         word_timestamps=False,
         initial_prompt=initial_prompt or None,
+        verbose=False,
     )
     out = []
     for seg in result["segments"]:
@@ -85,22 +89,33 @@ def _transcribe_ct2(
     audio: Path, model_id: str, initial_prompt: str | None
 ) -> list[tuple[float, float, str]]:
     from faster_whisper import WhisperModel
+    from tqdm import tqdm
 
     device, compute_type = _ct2_device()
     model = WhisperModel(model_id, device=device, compute_type=compute_type)
-    segments, _info = model.transcribe(
+    segments, info = model.transcribe(
         str(audio),
         language="ja",
         beam_size=5,
         vad_filter=True,
         initial_prompt=initial_prompt or None,
     )
+    # faster-whisper returns a generator over segments. Drive it through
+    # tqdm with the audio duration as the total so the bar reports how
+    # much of the file has been decoded so far (not segment count, which
+    # is unknown until the generator is exhausted).
     out = []
-    for seg in segments:
-        start, end = float(seg.start), float(seg.end)
-        text = seg.text.strip()
-        if not is_runaway(text, end - start):
-            out.append((start, end, text))
+    with tqdm(total=round(info.duration), unit="s", desc="transcribing", dynamic_ncols=True) as pbar:
+        last_end = 0.0
+        for seg in segments:
+            start, end = float(seg.start), float(seg.end)
+            pbar.update(round(end - last_end))
+            last_end = end
+            text = seg.text.strip()
+            if not is_runaway(text, end - start):
+                out.append((start, end, text))
+        # Snap to 100% in case the last segment ends slightly before info.duration.
+        pbar.update(max(0, round(info.duration) - round(last_end)))
     return out
 
 

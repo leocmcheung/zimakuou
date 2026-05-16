@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import srt
+from tqdm import tqdm
 
 from .context import Context
 from .translators import get_translator
@@ -30,7 +31,7 @@ def translate_subs(
 
     out: list[srt.Subtitle] = []
     history: list[str] = []
-    for sub in jp_subs:
+    for sub in tqdm(jp_subs, desc="translating", unit="cue", dynamic_ncols=True):
         zh = translator.translate(sub.content, history)
         zh = cc.convert(zh)
         zh = ctx.apply_glossary(zh)

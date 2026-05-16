@@ -2,6 +2,7 @@ srt>=3.5.0
 opencc-python-reimplemented>=0.1.7
 huggingface_hub>=0.24.0
 pyyaml>=6.0
+tqdm>=4.66.0
 
 # Apple Silicon: MLX-native whisper for ASR + MLX-lm kept as an optional
 # alternative for non-GGUF LLMs (the default LLM is now a Sakura GGUF, served
