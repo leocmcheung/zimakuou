@@ -1,6 +1,8 @@
 import tempfile
+import time
 from pathlib import Path
 
+from ._timing import fmt_duration
 from .audio import extract_audio
 from .audit import write_glossary_draft
 from .context import Context
@@ -31,17 +33,25 @@ def run(
         extract_audio(video, wav)
 
         print(f"[2/3] transcribing (asr_model={asr_model or 'default'})")
+        t0 = time.perf_counter()
         jp_subs = transcribe(
             wav, asr_model, initial_prompt=ctx.whisper_initial_prompt() or None
         )
         write_srt(jp_subs, jp_path)
-        print(f"      wrote {jp_path.name} ({len(jp_subs)} cues)")
+        print(
+            f"      wrote {jp_path.name} ({len(jp_subs)} cues, "
+            f"{fmt_duration(time.perf_counter() - t0)})"
+        )
 
     print(f"[3/3] translating to Traditional Chinese")
+    t0 = time.perf_counter()
     zh_subs = translate_subs(jp_subs, llm_model, ctx=ctx)
     write_srt(zh_subs, zh_path)
     write_bilingual(jp_subs, zh_subs, bi_path)
-    print(f"      wrote {zh_path.name} and {bi_path.name}")
+    print(
+        f"      wrote {zh_path.name} and {bi_path.name} "
+        f"({fmt_duration(time.perf_counter() - t0)})"
+    )
 
     draft_path = Path(f"{stem}.context.draft.yaml")
     if write_glossary_draft(jp_subs, draft_path, ctx):

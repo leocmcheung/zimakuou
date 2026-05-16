@@ -116,6 +116,8 @@ def _ct2_device() -> tuple[str, str]:
 
 if __name__ == "__main__":
     import argparse
+    import time
+    from ._timing import fmt_duration
     from .srt_writer import write_srt
 
     p = argparse.ArgumentParser()
@@ -129,6 +131,8 @@ if __name__ == "__main__":
     if args.context:
         from .context import Context
         prompt = Context.load(args.context).whisper_initial_prompt() or None
+    t0 = time.perf_counter()
     subs = transcribe(args.audio, args.model, initial_prompt=prompt)
+    elapsed = time.perf_counter() - t0
     write_srt(subs, out)
-    print(f"Wrote {out} ({len(subs)} cues)")
+    print(f"Wrote {out} ({len(subs)} cues, {fmt_duration(elapsed)})")

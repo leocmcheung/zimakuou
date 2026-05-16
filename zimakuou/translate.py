@@ -43,6 +43,8 @@ def translate_subs(
 
 if __name__ == "__main__":
     import argparse
+    import time
+    from ._timing import fmt_duration
     from .audit import write_glossary_draft
     from .srt_writer import write_bilingual, write_srt
 
@@ -54,14 +56,16 @@ if __name__ == "__main__":
 
     jp_subs = list(srt.parse(args.jp_srt.read_text(encoding="utf-8")))
     ctx = Context.load(args.context) if args.context else Context.empty()
+    t0 = time.perf_counter()
     zh_subs = translate_subs(jp_subs, args.llm, ctx=ctx)
+    elapsed = time.perf_counter() - t0
 
     stem = args.jp_srt.with_suffix("").with_suffix("")  # strip .jp.srt
     zh_path = Path(f"{stem}.zh-tw.srt")
     bi_path = Path(f"{stem}.bilingual.srt")
     write_srt(zh_subs, zh_path)
     write_bilingual(jp_subs, zh_subs, bi_path)
-    print(f"Wrote {zh_path} and {bi_path}")
+    print(f"Wrote {zh_path} and {bi_path} ({fmt_duration(elapsed)})")
 
     draft_path = Path(f"{stem}.context.draft.yaml")
     if write_glossary_draft(jp_subs, draft_path, ctx):
