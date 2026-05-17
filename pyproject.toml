@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zimakuou"
+version = "0.1.0"
+description = "Anime/TV video → Japanese + Traditional Chinese subtitle pipeline."
+requires-python = ">=3.10"
+# Runtime dependencies are pinned in requirements.txt (pip-only, platform-split).
+# pyproject.toml exists so `pip install -e .` makes the package importable
+# from any cwd — it does not duplicate the version pins.
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["zimakuou*"]
+exclude = ["tests*"]

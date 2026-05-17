@@ -6,6 +6,9 @@ venv/
 .env
 .DS_Store
 
+# Editable install metadata
+*.egg-info/
+
 # Generated artifacts — keep test fixtures elsewhere
 *.wav
 *.mp4
