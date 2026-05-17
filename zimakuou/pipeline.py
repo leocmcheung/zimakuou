@@ -7,7 +7,7 @@ from .audio import extract_audio
 from .audit import write_glossary_draft
 from .context import Context
 from .srt_writer import write_bilingual, write_srt
-from .transcribe import transcribe
+from .transcribe import DEFAULT_MAX_CUE_DURATION, transcribe
 from .translate import translate_subs
 
 
@@ -16,6 +16,7 @@ def run(
     asr_model: str | None = None,
     llm_model: str | None = None,
     context_path: Path | None = None,
+    max_cue_duration: float | None = DEFAULT_MAX_CUE_DURATION,
 ) -> tuple[Path, Path, Path]:
     stem = video.with_suffix("")
     jp_path = Path(f"{stem}.jp.srt")
@@ -35,7 +36,10 @@ def run(
         print(f"[2/3] transcribing (asr_model={asr_model or 'default'})")
         t0 = time.perf_counter()
         jp_subs = transcribe(
-            wav, asr_model, initial_prompt=ctx.whisper_initial_prompt() or None
+            wav,
+            asr_model,
+            initial_prompt=ctx.whisper_initial_prompt() or None,
+            max_cue_duration=max_cue_duration,
         )
         write_srt(jp_subs, jp_path)
         print(

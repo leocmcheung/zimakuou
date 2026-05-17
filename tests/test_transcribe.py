@@ -1,4 +1,4 @@
-from zimakuou.transcribe import is_runaway
+from zimakuou.transcribe import is_runaway, split_long_cue
 
 
 def test_normal_cue_kept():
@@ -39,3 +39,60 @@ def test_repeated_character_threshold_is_majority():
 def test_empty_text_dropped():
     assert is_runaway("", 1.0)
     assert is_runaway("   ", 1.0)
+
+
+def test_split_short_cue_untouched():
+    # 5s cue with a 12s budget — no reason to split.
+    words = [(0.0, 1.0, "こん"), (1.2, 2.0, "にちは"), (3.0, 5.0, "皆さん")]
+    out = split_long_cue(0.0, 5.0, "こんにちは皆さん", words, max_dur=12.0)
+    assert out == [(0.0, 5.0, "こんにちは皆さん")]
+
+
+def test_split_long_cue_at_largest_gap():
+    # 20s cue with a big silence in the middle — should split there.
+    words = [
+        (0.0, 2.0, "おはよう"),
+        (2.0, 4.0, "ございます"),     # tight cluster, gap of 0.0 after
+        (10.0, 12.0, "今日は"),       # big 6s gap before this word
+        (12.0, 14.0, "いい天気"),
+        (14.0, 16.0, "ですね"),
+    ]
+    out = split_long_cue(0.0, 16.0, "おはようございます今日はいい天気ですね", words, max_dur=12.0)
+    assert len(out) == 2
+    left, right = out
+    assert left == (0.0, 4.0, "おはようございます")
+    assert right == (10.0, 16.0, "今日はいい天気ですね")
+
+
+def test_split_recurses_until_under_budget():
+    # 30s cue. First split should yield two ~15s halves; the larger
+    # half still exceeds 12s and should be split again.
+    words = [
+        (0.0, 3.0, "A"),
+        (3.0, 6.0, "B"),
+        (10.0, 13.0, "C"),  # 4s gap — biggest, primary split point
+        (13.0, 16.0, "D"),
+        (18.0, 21.0, "E"),  # 2s gap — secondary split inside right half
+        (21.0, 24.0, "F"),
+    ]
+    out = split_long_cue(0.0, 24.0, "ABCDEF", words, max_dur=10.0)
+    # Three pieces, each ≤10s and in time order.
+    assert len(out) == 3
+    assert all(end - start <= 10.0 for start, end, _ in out)
+    starts = [s for s, _, _ in out]
+    assert starts == sorted(starts)
+
+
+def test_split_no_word_timestamps_leaves_cue_alone():
+    # No word_timestamps → can't split safely. Better one long cue than
+    # an arbitrary mid-string chop.
+    out = split_long_cue(0.0, 30.0, "テキスト", words=[], max_dur=10.0)
+    assert out == [(0.0, 30.0, "テキスト")]
+
+
+def test_split_no_real_gap_keeps_cue_when_not_egregious():
+    # Tightly packed words and only moderately over budget — splitting
+    # would produce an awkward mid-sentence chop. Leave it.
+    words = [(i * 1.0, (i + 1) * 1.0, "x") for i in range(13)]
+    out = split_long_cue(0.0, 13.0, "x" * 13, words, max_dur=12.0)
+    assert out == [(0.0, 13.0, "x" * 13)]

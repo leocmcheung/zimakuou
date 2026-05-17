@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from .pipeline import run
+from .transcribe import DEFAULT_MAX_CUE_DURATION
 
 
 def main():
@@ -29,12 +30,23 @@ def main():
         default=None,
         help="Optional YAML with synopsis, characters, glossary (see CLAUDE.md)",
     )
+    parser.add_argument(
+        "--max-cue-duration",
+        type=float,
+        default=DEFAULT_MAX_CUE_DURATION,
+        help=(
+            f"Post-split cues longer than this many seconds at the largest "
+            f"internal silence (default: {DEFAULT_MAX_CUE_DURATION}). "
+            f"Use 0 to disable splitting."
+        ),
+    )
     args = parser.parse_args()
     run(
         args.video,
         asr_model=args.asr_model,
         llm_model=args.llm,
         context_path=args.context,
+        max_cue_duration=args.max_cue_duration if args.max_cue_duration > 0 else None,
     )
 
 

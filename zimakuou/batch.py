@@ -40,7 +40,7 @@ from .audio import extract_audio
 from .audit import write_glossary_draft
 from .context import Context
 from .srt_writer import write_bilingual, write_srt
-from .transcribe import transcribe
+from .transcribe import DEFAULT_MAX_CUE_DURATION, transcribe
 from .translate import translate_subs
 from .translators import get_translator
 
@@ -117,6 +117,7 @@ def _transcribe_all(
     asr_model: str | None,
     ctx: Context,
     force: bool,
+    max_cue_duration: float | None = DEFAULT_MAX_CUE_DURATION,
 ) -> None:
     print(f"[2/3] transcribing (asr_model={asr_model or 'default'})")
     initial_prompt = ctx.whisper_initial_prompt() or None
@@ -136,7 +137,9 @@ def _transcribe_all(
             continue
         t0 = time.perf_counter()
         print(f"  [{i}/{len(videos)}] {wav.name} → {jp_srt.name}")
-        jp_subs = transcribe(wav, asr_model, initial_prompt=initial_prompt)
+        jp_subs = transcribe(
+            wav, asr_model, initial_prompt=initial_prompt, max_cue_duration=max_cue_duration
+        )
         write_srt(jp_subs, jp_srt)
         print(
             f"        wrote {jp_srt.name} ({len(jp_subs)} cues, "
@@ -195,6 +198,7 @@ def run_batch(
     llm_model: str | None = None,
     ctx: Context | None = None,
     force: bool = False,
+    max_cue_duration: float | None = DEFAULT_MAX_CUE_DURATION,
 ) -> None:
     ctx = ctx or Context.empty()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -219,7 +223,7 @@ def run_batch(
         print(f"[batch] processing {len(to_process)} videos")
 
     _extract_all(to_process, out_dir, force)
-    _transcribe_all(to_process, out_dir, asr_model, ctx, force)
+    _transcribe_all(to_process, out_dir, asr_model, ctx, force, max_cue_duration)
     _translate_all(to_process, out_dir, llm_model, ctx, force)
 
 
@@ -247,6 +251,16 @@ def main() -> int:
         action="store_true",
         help="Redo all phases even when output files already exist",
     )
+    parser.add_argument(
+        "--max-cue-duration",
+        type=float,
+        default=DEFAULT_MAX_CUE_DURATION,
+        help=(
+            f"Post-split cues longer than this many seconds at the largest "
+            f"internal silence (default: {DEFAULT_MAX_CUE_DURATION}). "
+            f"Use 0 to disable splitting."
+        ),
+    )
     args = parser.parse_args()
 
     ctx = Context.load(args.context) if args.context else Context.empty()
@@ -263,6 +277,7 @@ def main() -> int:
         llm_model=args.llm,
         ctx=ctx,
         force=args.force,
+        max_cue_duration=args.max_cue_duration if args.max_cue_duration > 0 else None,
     )
     return 0
 
