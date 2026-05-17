@@ -17,6 +17,7 @@ def _sub(i: int, text: str) -> srt.Subtitle:
 def _stub_video(path: Path) -> Path:
     """Real videos are huge — for the batch unit tests we just want a path
     that .exists(), since extract_audio is mocked."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"fake-mp4")
     return path
 
@@ -154,3 +155,76 @@ def test_paths_are_derived_from_video_stem_not_full_path(tmp_path):
     assert zh == tmp_path / "My Show S01E01.zh-tw.srt"
     assert bi == tmp_path / "My Show S01E01.bilingual.srt"
     assert draft == tmp_path / "My Show S01E01.context.draft.yaml"
+
+
+def test_existing_subtitle_detects_jp_srt_in_out_dir(tmp_path):
+    """Subs from a prior batch run that stayed in cwd should trigger skip."""
+    v = _stub_video(tmp_path / "videos" / "ep1.mp4")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "ep1.jp.srt").write_text("...", encoding="utf-8")
+
+    assert batch_mod._existing_subtitle(v, out_dir) == out_dir / "ep1.jp.srt"
+
+
+def test_existing_subtitle_detects_sub_next_to_video(tmp_path):
+    """User pattern: process a video, move .srt files back to the NAS folder.
+    On the next batch run, the script should notice them there and skip."""
+    nas = tmp_path / "nas-folder"
+    nas.mkdir()
+    v = _stub_video(nas / "ep1.mp4")
+    (nas / "ep1.zh-tw.srt").write_text("...", encoding="utf-8")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    assert batch_mod._existing_subtitle(v, out_dir) == nas / "ep1.zh-tw.srt"
+
+
+def test_existing_subtitle_returns_none_when_no_subs(tmp_path):
+    v = _stub_video(tmp_path / "ep1.mp4")
+    assert batch_mod._existing_subtitle(v, tmp_path) is None
+
+
+def test_run_batch_skips_videos_with_existing_subs(tmp_path, monkeypatch):
+    nas = tmp_path / "nas"
+    nas.mkdir()
+    done = _stub_video(nas / "ep1.mp4")
+    fresh = _stub_video(nas / "ep2.mp4")
+    # ep1 already has subs sitting next to it on the NAS
+    (nas / "ep1.bilingual.srt").write_text("done", encoding="utf-8")
+
+    out_dir = tmp_path / "out"
+    extracted: list[str] = []
+    monkeypatch.setattr(
+        batch_mod,
+        "extract_audio",
+        lambda video, wav: extracted.append(video.name) or wav.write_bytes(b"w"),
+    )
+    monkeypatch.setattr(batch_mod, "transcribe", lambda *a, **kw: [_sub(1, "a")])
+    monkeypatch.setattr(
+        batch_mod, "get_translator", lambda *a, **kw: MagicMock(translate=lambda *_: "x")
+    )
+
+    batch_mod.run_batch([done, fresh], out_dir=out_dir, force=False)
+
+    # Only ep2 should have been extracted; ep1 was filtered before phase 1.
+    assert extracted == ["ep2.mp4"]
+
+
+def test_run_batch_force_ignores_existing_subs(tmp_path, monkeypatch):
+    v = _stub_video(tmp_path / "ep1.mp4")
+    (tmp_path / "ep1.jp.srt").write_text("...", encoding="utf-8")
+
+    extracted: list[str] = []
+    monkeypatch.setattr(
+        batch_mod,
+        "extract_audio",
+        lambda video, wav: extracted.append(video.name) or wav.write_bytes(b"w"),
+    )
+    monkeypatch.setattr(batch_mod, "transcribe", lambda *a, **kw: [_sub(1, "a")])
+    monkeypatch.setattr(
+        batch_mod, "get_translator", lambda *a, **kw: MagicMock(translate=lambda *_: "x")
+    )
+
+    batch_mod.run_batch([v], out_dir=tmp_path, force=True)
+    assert extracted == ["ep1.mp4"]  # --force bypassed the pre-flight skip

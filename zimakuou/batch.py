@@ -57,6 +57,44 @@ def _local_paths(video: Path, out_dir: Path) -> tuple[Path, Path, Path, Path, Pa
     )
 
 
+# Subtitle suffixes the pipeline produces. If any of these exists for a given
+# video stem we treat the video as "already processed" and skip it in batch
+# runs unless --force is passed.
+_PIPELINE_SUB_SUFFIXES = (".jp.srt", ".zh-tw.srt", ".bilingual.srt")
+
+
+def _existing_subtitle(video: Path, out_dir: Path) -> Path | None:
+    """Return the first pipeline subtitle file we find for `video`, or None.
+    Checks two locations: (1) the local out_dir (previous batch run in the
+    same cwd) and (2) next to the video on whatever storage it lives on,
+    so a video whose .srt files were already moved back to the NAS is
+    recognised on the next batch run."""
+    stem = video.stem
+    for parent in (out_dir, video.parent):
+        for suffix in _PIPELINE_SUB_SUFFIXES:
+            candidate = parent / f"{stem}{suffix}"
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def _partition_by_existing_subs(
+    videos: list[Path], out_dir: Path
+) -> tuple[list[Path], list[tuple[Path, Path]]]:
+    """Split `videos` into (to_process, already_done) where the second
+    list pairs each skipped video with the existing subtitle that
+    triggered the skip."""
+    to_process: list[Path] = []
+    already_done: list[tuple[Path, Path]] = []
+    for v in videos:
+        existing = _existing_subtitle(v, out_dir)
+        if existing is None:
+            to_process.append(v)
+        else:
+            already_done.append((v, existing))
+    return to_process, already_done
+
+
 def _extract_all(videos: list[Path], out_dir: Path, force: bool) -> None:
     print(f"[1/3] extracting audio for {len(videos)} videos → {out_dir}")
     for i, video in enumerate(videos, start=1):
@@ -160,9 +198,29 @@ def run_batch(
 ) -> None:
     ctx = ctx or Context.empty()
     out_dir.mkdir(parents=True, exist_ok=True)
-    _extract_all(videos, out_dir, force)
-    _transcribe_all(videos, out_dir, asr_model, ctx, force)
-    _translate_all(videos, out_dir, llm_model, ctx, force)
+
+    # Pre-flight: skip videos that already have pipeline subtitles, either
+    # locally (previous batch) or next to the video (e.g. files moved back
+    # to the NAS after an earlier run). Saves NAS bandwidth in phase 1.
+    if force:
+        to_process = videos
+    else:
+        to_process, already_done = _partition_by_existing_subs(videos, out_dir)
+        if already_done:
+            print(
+                f"[batch] {len(already_done)} of {len(videos)} videos already have "
+                f"subtitles, skipping (--force to override):"
+            )
+            for video, existing in already_done:
+                print(f"  - {video.name}  ← {existing.name}")
+        if not to_process:
+            print(f"[batch] nothing to do.")
+            return
+        print(f"[batch] processing {len(to_process)} videos")
+
+    _extract_all(to_process, out_dir, force)
+    _transcribe_all(to_process, out_dir, asr_model, ctx, force)
+    _translate_all(to_process, out_dir, llm_model, ctx, force)
 
 
 def main() -> int:
