@@ -6,12 +6,14 @@ from tqdm import tqdm
 
 from .context import Context
 from .translators import get_translator
+from .translators.base import Translator
 
 
 def translate_subs(
     jp_subs: list[srt.Subtitle],
     llm_model: str | None = None,
     ctx: Context | None = None,
+    translator: Translator | None = None,
 ) -> list[srt.Subtitle]:
     """Translate cue-by-cue. Each cue gets a sliding window of prior cues
     as context to keep pronouns / honorifics coherent.
@@ -19,11 +21,15 @@ def translate_subs(
     `ctx` (synopsis / characters / glossary) is threaded into the backend's
     native prompt format inside get_translator. A post-pass with OpenCC
     and a glossary substitution catches Simplified leakage and missed
-    glossary terms."""
+    glossary terms.
+
+    Pass `translator` to reuse a pre-built backend across multiple files
+    (batch mode) — saves the multi-GB model reload between episodes."""
     from opencc import OpenCC
 
     ctx = ctx or Context.empty()
-    translator = get_translator(llm_model, ctx=ctx)
+    if translator is None:
+        translator = get_translator(llm_model, ctx=ctx)
     # Safety net: many models leak Simplified characters even when asked for
     # Traditional, and Sakura is *trained* to emit Simplified — OpenCC s2twp
     # normalises everything to Traditional (Taiwan) with phrase mapping.

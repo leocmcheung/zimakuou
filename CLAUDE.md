@@ -54,6 +54,20 @@ python -m zimakuou path/to/video.mkv --context path/to/show.context.yaml
 # stage-by-stage (each stage is independently runnable, both accept --context)
 python -m zimakuou.transcribe path/to/audio.wav      # → jp.srt
 python -m zimakuou.translate  path/to/file.jp.srt    # → zh-tw.srt + bilingual.srt
+
+# batch mode for many videos, designed for NAS-hosted sources that may
+# disconnect: phase 1 extracts ALL audio up front (NAS-dependent), phase 2
+# transcribes each .wav locally then deletes it, phase 3 loads the LLM ONCE
+# and translates every .jp.srt. Outputs land in cwd. Resumable — each phase
+# skips files whose outputs already exist.
+cd ~/some/local/work-dir
+python -m zimakuou.batch \
+    /Volumes/NAS/show/ep01.mp4 /Volumes/NAS/show/ep02.mp4 ... \
+    --context /Volumes/NAS/show/show.context.yaml
+
+# merge per-episode draft glossaries into a show-wide master (keeps terms
+# with ≥10 total mentions across all drafts; preserves existing comments)
+python -m zimakuou.merge_drafts /path/to/show-folder
 ```
 
 ### Context YAML schema
