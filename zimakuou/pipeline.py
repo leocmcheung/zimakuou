@@ -17,6 +17,7 @@ def run(
     llm_model: str | None = None,
     context_path: Path | None = None,
     max_cue_duration: float | None = DEFAULT_MAX_CUE_DURATION,
+    n_gpu_layers: int = -1,
 ) -> tuple[Path, Path, Path]:
     stem = video.with_suffix("")
     jp_path = Path(f"{stem}.jp.srt")
@@ -49,7 +50,7 @@ def run(
 
     print(f"[3/3] translating to Traditional Chinese")
     t0 = time.perf_counter()
-    zh_subs = translate_subs(jp_subs, llm_model, ctx=ctx)
+    zh_subs = translate_subs(jp_subs, llm_model, ctx=ctx, n_gpu_layers=n_gpu_layers)
     write_srt(zh_subs, zh_path)
     write_bilingual(jp_subs, zh_subs, bi_path)
     print(

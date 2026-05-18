@@ -14,6 +14,7 @@ def translate_subs(
     llm_model: str | None = None,
     ctx: Context | None = None,
     translator: Translator | None = None,
+    n_gpu_layers: int = -1,
 ) -> list[srt.Subtitle]:
     """Translate cue-by-cue. Each cue gets a sliding window of prior cues
     as context to keep pronouns / honorifics coherent.
@@ -29,7 +30,7 @@ def translate_subs(
 
     ctx = ctx or Context.empty()
     if translator is None:
-        translator = get_translator(llm_model, ctx=ctx)
+        translator = get_translator(llm_model, ctx=ctx, n_gpu_layers=n_gpu_layers)
     # Safety net: many models leak Simplified characters even when asked for
     # Traditional, and Sakura is *trained* to emit Simplified — OpenCC s2twp
     # normalises everything to Traditional (Taiwan) with phrase mapping.
@@ -59,12 +60,22 @@ if __name__ == "__main__":
     p.add_argument("jp_srt", type=Path, help="Japanese SRT to translate")
     p.add_argument("--llm", default=None)
     p.add_argument("--context", type=Path, default=None, help="Context YAML")
+    p.add_argument(
+        "--n-gpu-layers",
+        type=int,
+        default=-1,
+        help=(
+            "How many transformer blocks to offload to GPU (llama.cpp/GGUF only; "
+            "ignored by MLX). -1 = all (default). Drop to a partial count on "
+            "VRAM-constrained GPUs, e.g. 35 for Sakura-14B Q4_K_M on an 8 GB card."
+        ),
+    )
     args = p.parse_args()
 
     jp_subs = list(srt.parse(args.jp_srt.read_text(encoding="utf-8")))
     ctx = Context.load(args.context) if args.context else Context.empty()
     t0 = time.perf_counter()
-    zh_subs = translate_subs(jp_subs, args.llm, ctx=ctx)
+    zh_subs = translate_subs(jp_subs, args.llm, ctx=ctx, n_gpu_layers=args.n_gpu_layers)
     elapsed = time.perf_counter() - t0
 
     stem = args.jp_srt.with_suffix("").with_suffix("")  # strip .jp.srt

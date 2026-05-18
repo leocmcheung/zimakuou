@@ -29,13 +29,16 @@ class LlamaTranslator(Translator):
         system: str | None = None,
         style: str = "generic",
         glossary: list["GlossaryEntry"] | None = None,
+        n_gpu_layers: int = -1,
     ):
         from llama_cpp import Llama
 
         # n_gpu_layers=-1 offloads every layer to Metal (Mac) / CUDA (Windows).
         # Without it llama.cpp runs entirely on CPU even when built with GPU
-        # support, which on a 14B model is ~10× slower.
-        kwargs = dict(n_ctx=4096, n_gpu_layers=-1, verbose=False)
+        # support, which on a 14B model is ~10× slower. On VRAM-constrained
+        # GPUs (e.g. 8 GB laptops vs Sakura-14B's 8.4 GB) pass a partial count
+        # so the remaining blocks run on CPU instead of OOMing at load.
+        kwargs = dict(n_ctx=4096, n_gpu_layers=n_gpu_layers, verbose=False)
 
         target = model or DEFAULT_REPO
         if _looks_like_hf_repo(target):

@@ -40,6 +40,16 @@ def main():
             f"Use 0 to disable splitting."
         ),
     )
+    parser.add_argument(
+        "--n-gpu-layers",
+        type=int,
+        default=-1,
+        help=(
+            "How many transformer blocks to offload to GPU (llama.cpp/GGUF only; "
+            "ignored by MLX). -1 = all (default). Drop to a partial count on "
+            "VRAM-constrained GPUs, e.g. 35 for Sakura-14B Q4_K_M on an 8 GB card."
+        ),
+    )
     args = parser.parse_args()
     run(
         args.video,
@@ -47,6 +57,7 @@ def main():
         llm_model=args.llm,
         context_path=args.context,
         max_cue_duration=args.max_cue_duration if args.max_cue_duration > 0 else None,
+        n_gpu_layers=args.n_gpu_layers,
     )
 
 

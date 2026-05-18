@@ -155,6 +155,7 @@ def _translate_all(
     llm_model: str | None,
     ctx: Context,
     force: bool,
+    n_gpu_layers: int = -1,
 ) -> None:
     print(f"[3/3] translating to Traditional Chinese")
     # Build the translator once — Sakura is 8.4 GB to load; doing it per
@@ -174,7 +175,7 @@ def _translate_all(
         if translator is None:
             print(f"        loading translator (one-time)…")
             t_load = time.perf_counter()
-            translator = get_translator(llm_model, ctx=ctx)
+            translator = get_translator(llm_model, ctx=ctx, n_gpu_layers=n_gpu_layers)
             print(f"        ready ({fmt_duration(time.perf_counter() - t_load)})")
 
         jp_subs = list(srt.parse(jp_srt.read_text(encoding="utf-8")))
@@ -199,6 +200,7 @@ def run_batch(
     ctx: Context | None = None,
     force: bool = False,
     max_cue_duration: float | None = DEFAULT_MAX_CUE_DURATION,
+    n_gpu_layers: int = -1,
 ) -> None:
     ctx = ctx or Context.empty()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -224,7 +226,7 @@ def run_batch(
 
     _extract_all(to_process, out_dir, force)
     _transcribe_all(to_process, out_dir, asr_model, ctx, force, max_cue_duration)
-    _translate_all(to_process, out_dir, llm_model, ctx, force)
+    _translate_all(to_process, out_dir, llm_model, ctx, force, n_gpu_layers=n_gpu_layers)
 
 
 def main() -> int:
@@ -261,6 +263,16 @@ def main() -> int:
             f"Use 0 to disable splitting."
         ),
     )
+    parser.add_argument(
+        "--n-gpu-layers",
+        type=int,
+        default=-1,
+        help=(
+            "How many transformer blocks to offload to GPU (llama.cpp/GGUF only; "
+            "ignored by MLX). -1 = all (default). Drop to a partial count on "
+            "VRAM-constrained GPUs, e.g. 35 for Sakura-14B Q4_K_M on an 8 GB card."
+        ),
+    )
     args = parser.parse_args()
 
     ctx = Context.load(args.context) if args.context else Context.empty()
@@ -278,6 +290,7 @@ def main() -> int:
         ctx=ctx,
         force=args.force,
         max_cue_duration=args.max_cue_duration if args.max_cue_duration > 0 else None,
+        n_gpu_layers=args.n_gpu_layers,
     )
     return 0
 

@@ -37,6 +37,7 @@ def get_translator(
     model: str | None = None,
     *,
     ctx: "Context | None" = None,
+    n_gpu_layers: int = -1,
 ) -> Translator:
     """Pick the right backend for `model` + host and wire `ctx` into the
     prompt format the backend expects.
@@ -66,7 +67,10 @@ def get_translator(
 
     if _is_gguf(resolved):
         from .llama_backend import LlamaTranslator
-        return LlamaTranslator(resolved, system=system, style=style, glossary=glossary)
+        return LlamaTranslator(
+            resolved, system=system, style=style, glossary=glossary,
+            n_gpu_layers=n_gpu_layers,
+        )
 
     if sys.platform == "darwin" and platform.machine() == "arm64":
         from .mlx_backend import MLXTranslator
