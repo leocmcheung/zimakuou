@@ -4,7 +4,7 @@ For a show with many episodes, every translate run drops a draft glossary
 next to the video. This script aggregates those drafts:
 
 - Glossary terms are summed across all drafts and kept when their total
-  mention count is ≥ MIN_MENTIONS (default 10).
+  mention count is ≥ MIN_MENTIONS (default 3).
 - Character names are re-counted by scanning the matching `<stem>.jp.srt`
   files (drafts don't preserve character counts), and the same threshold
   applies — so anchors who recur weekly survive, but one-off interviewees
@@ -35,7 +35,7 @@ import yaml
 from .audit import find_candidates
 from .context import Context
 
-MIN_MENTIONS = 10
+MIN_MENTIONS = 3
 
 # Note format in drafts: `note: "21×"`. Captures the integer.
 _COUNT_RE = re.compile(r"(\d+)\s*[×x]")

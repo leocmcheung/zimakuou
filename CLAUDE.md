@@ -66,7 +66,7 @@ python -m zimakuou.batch \
     --context /Volumes/NAS/show/show.context.yaml
 
 # merge per-episode draft glossaries into a show-wide master (keeps terms
-# with ≥10 total mentions across all drafts; preserves existing comments)
+# with ≥3 total mentions across all drafts; preserves existing comments)
 python -m zimakuou.merge_drafts /path/to/show-folder
 ```
 
