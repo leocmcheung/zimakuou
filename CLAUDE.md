@@ -84,9 +84,12 @@ glossary:
   - { jp: スペック,   zh: 讀心能力, note: protagonist's ability }
   - { jp: サトリマス, zh: 我懂了 }
   - { jp: ミミ,        zh: 咪咪 }
+  - { jp: 食材,        zh: 食材, whisper: false }   # post-pass only, no ASR bias
 ```
 
-Whisper's `initial_prompt` budget is ~224 tokens — only the JP side of `characters` + `glossary` is sent, capped at 200 chars. The full block (synopsis + glossary table) goes into the LLM system prompt, which has no practical cap.
+Whisper's `initial_prompt` budget is ~224 tokens — JP `characters` + glossary entries (those with default `whisper: true`) + a synopsis tail are sent, capped at 200 chars. The full glossary (regardless of `whisper:`) goes into the LLM system prompt and the post-translation `apply_glossary` pass; the flag only filters the ASR prompt.
+
+If a `<video>.description` sidecar sits next to the input video, its text is auto-merged into `synopsis` — use this for per-episode plot/recipe details while keeping the YAML show-wide.
 
 ### Tests
 

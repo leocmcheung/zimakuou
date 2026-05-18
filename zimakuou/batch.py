@@ -120,7 +120,6 @@ def _transcribe_all(
     max_cue_duration: float | None = DEFAULT_MAX_CUE_DURATION,
 ) -> None:
     print(f"[2/3] transcribing (asr_model={asr_model or 'default'})")
-    initial_prompt = ctx.whisper_initial_prompt() or None
     for i, video in enumerate(videos, start=1):
         wav, jp_srt, *_ = _local_paths(video, out_dir)
         if jp_srt.exists() and not force:
@@ -135,6 +134,10 @@ def _transcribe_all(
                 file=sys.stderr,
             )
             continue
+        # Per-video ctx: merge the show-wide YAML with this episode's
+        # `<video>.description` sidecar if one exists.
+        per_ctx = ctx.with_sidecar(video)
+        initial_prompt = per_ctx.whisper_initial_prompt() or None
         t0 = time.perf_counter()
         print(f"  [{i}/{len(videos)}] {wav.name} → {jp_srt.name}")
         jp_subs = transcribe(
@@ -172,23 +175,29 @@ def _translate_all(
                 file=sys.stderr,
             )
             continue
+        # Per-video ctx so per-episode `.description` flows into the
+        # glossary post-pass and (for non-Sakura backends) any future
+        # synopsis-aware behaviour. The cached translator's system prompt
+        # is fixed at construction — fine for Sakura (no synopsis used)
+        # and an acceptable trade-off vs reloading 8 GB per episode.
+        per_ctx = ctx.with_sidecar(video)
         if translator is None:
             print(f"        loading translator (one-time)…")
             t_load = time.perf_counter()
-            translator = get_translator(llm_model, ctx=ctx, n_gpu_layers=n_gpu_layers)
+            translator = get_translator(llm_model, ctx=per_ctx, n_gpu_layers=n_gpu_layers)
             print(f"        ready ({fmt_duration(time.perf_counter() - t_load)})")
 
         jp_subs = list(srt.parse(jp_srt.read_text(encoding="utf-8")))
         t0 = time.perf_counter()
         print(f"  [{i}/{len(videos)}] {jp_srt.name} → {zh_srt.name}")
-        zh_subs = translate_subs(jp_subs, ctx=ctx, translator=translator)
+        zh_subs = translate_subs(jp_subs, ctx=per_ctx, translator=translator)
         write_srt(zh_subs, zh_srt)
         write_bilingual(jp_subs, zh_subs, bi_srt)
         print(
             f"        wrote {zh_srt.name} + {bi_srt.name} "
             f"({fmt_duration(time.perf_counter() - t0)})"
         )
-        if write_glossary_draft(jp_subs, draft, ctx):
+        if write_glossary_draft(jp_subs, draft, per_ctx):
             print(f"        [audit] drafted glossary candidates → {draft.name}")
 
 

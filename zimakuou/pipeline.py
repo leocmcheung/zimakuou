@@ -28,6 +28,10 @@ def run(
     if not ctx.is_empty():
         print(f"[ctx] loaded {context_path.name}: "
               f"{len(ctx.characters)} characters, {len(ctx.glossary)} glossary entries")
+    merged = ctx.with_sidecar(video)
+    if merged is not ctx:
+        print(f"[ctx] merged sidecar {video.with_suffix('.description').name}")
+        ctx = merged
 
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "audio.wav"

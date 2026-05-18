@@ -13,6 +13,10 @@ class GlossaryEntry:
     jp: str
     zh: str
     note: str = ""
+    # When False, this term is omitted from whisper's initial_prompt — use for
+    # common words that don't need ASR priming but should still be enforced by
+    # apply_glossary and the LLM context block.
+    whisper: bool = True
 
 
 @dataclass
@@ -33,7 +37,12 @@ class Context:
 
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         glossary = [
-            GlossaryEntry(jp=g["jp"], zh=g["zh"], note=g.get("note", ""))
+            GlossaryEntry(
+                jp=g["jp"],
+                zh=g["zh"],
+                note=g.get("note", ""),
+                whisper=bool(g.get("whisper", True)),
+            )
             for g in (data.get("glossary") or [])
         ]
         return cls(
@@ -44,18 +53,47 @@ class Context:
             characters=list(data.get("characters") or []),
         )
 
+    def with_sidecar(self, media_path: Path) -> Context:
+        """Return a new Context with `<media_path>.description` text appended
+        to synopsis, if such a sidecar file exists. Otherwise return self
+        unchanged. Caller is responsible for passing a path whose
+        `.with_suffix(".description")` resolves to the expected sidecar
+        (e.g. a video path, or a stem with no suffix)."""
+        sidecar = media_path.with_suffix(".description")
+        if not sidecar.is_file():
+            return self
+        text = sidecar.read_text(encoding="utf-8").strip()
+        if not text:
+            return self
+        merged = f"{self.synopsis}\n{text}".strip() if self.synopsis else text
+        return Context(
+            title=self.title,
+            title_zh_tw=self.title_zh_tw,
+            synopsis=merged,
+            glossary=list(self.glossary),
+            characters=list(self.characters),
+        )
+
     def is_empty(self) -> bool:
         return not (self.title or self.synopsis or self.glossary or self.characters)
 
     def whisper_initial_prompt(self) -> str:
-        """Comma-joined JP names + glossary terms to bias whisper's decoder.
-        Returns "" if nothing useful — caller should pass `None` to whisper in that case."""
+        """JP names + glossary terms + synopsis to bias whisper's decoder.
+        Terms come first (highest signal-per-char); synopsis fills any
+        remaining budget so per-episode `.description` content also primes
+        the decoder. Returns "" if nothing useful — caller should pass
+        `None` to whisper in that case."""
         terms = list(dict.fromkeys(  # dedup, preserve order
-            self.characters + [g.jp for g in self.glossary]
+            self.characters + [g.jp for g in self.glossary if g.whisper]
         ))
-        if not terms:
+        parts: list[str] = []
+        if terms:
+            parts.append("、".join(terms))
+        if self.synopsis:
+            parts.append(self.synopsis)
+        if not parts:
             return ""
-        return "、".join(terms)[:WHISPER_PROMPT_CHAR_BUDGET]
+        return "。".join(parts)[:WHISPER_PROMPT_CHAR_BUDGET]
 
     def llm_context_block(self) -> str:
         """Markdown-ish context block to append to the LLM system prompt."""

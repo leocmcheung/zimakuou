@@ -74,11 +74,14 @@ if __name__ == "__main__":
 
     jp_subs = list(srt.parse(args.jp_srt.read_text(encoding="utf-8")))
     ctx = Context.load(args.context) if args.context else Context.empty()
+    stem = args.jp_srt.with_suffix("").with_suffix("")  # strip .jp.srt
+    merged = ctx.with_sidecar(stem)
+    if merged is not ctx:
+        print(f"[ctx] merged sidecar {stem.with_suffix('.description').name}")
+        ctx = merged
     t0 = time.perf_counter()
     zh_subs = translate_subs(jp_subs, args.llm, ctx=ctx, n_gpu_layers=args.n_gpu_layers)
     elapsed = time.perf_counter() - t0
-
-    stem = args.jp_srt.with_suffix("").with_suffix("")  # strip .jp.srt
     zh_path = Path(f"{stem}.zh-tw.srt")
     bi_path = Path(f"{stem}.bilingual.srt")
     write_srt(zh_subs, zh_path)
