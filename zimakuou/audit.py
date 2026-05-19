@@ -59,7 +59,29 @@ _NAME_STOPWORDS = {
     "おれ", "うち", "みんな", "ども", "皆",
 }
 
-KATAKANA_MIN_COUNT = 2  # need to see a katakana term twice to suggest it
+# Common katakana loanwords that pass the ≥4-char regex but aren't worth
+# glossarying — every Japanese audience knows them, and listing them just
+# wastes prompt budget. Edit per-project if a show legitimately centres
+# on one of these (e.g. an America-focused travel show wanting アメリカ
+# tracked as a recurring topic).
+_KATAKANA_STOPWORDS = {
+    # Countries / regions
+    "アメリカ", "ヨーロッパ", "アフリカ", "イギリス", "フランス", "イタリア",
+    "スペイン", "オランダ", "ベルギー", "ポルトガル", "ギリシャ", "メキシコ",
+    "ブラジル", "アルゼンチン", "オーストラリア", "ニュージーランド",
+    "インドネシア", "マレーシア", "フィリピン", "ベトナム", "シンガポール",
+    "イスラエル",
+    # Common concepts
+    "ニュース", "スポーツ", "インターネット", "シリーズ", "バランス",
+    "パターン", "メッセージ", "システム", "スタイル", "イメージ",
+    "スケジュール", "アドバイス", "ストレス", "グループ", "メンバー",
+    "パーティー", "レストラン", "スーパー", "デパート", "マンション",
+    # Products / tech / loanwords
+    "パソコン", "スマートフォン", "シンプル", "ナチュラル", "スマート",
+    "メディア", "アイドル",
+}
+
+KATAKANA_MIN_COUNT = 3  # need ≥3 mentions in an episode to suggest it
 NAME_MIN_COUNT = 1      # names matter even when mentioned once
 
 
@@ -78,7 +100,7 @@ def find_candidates(
 
     katakana = Counter({
         k: v for k, v in katakana.items()
-        if v >= KATAKANA_MIN_COUNT and k not in covered
+        if v >= KATAKANA_MIN_COUNT and k not in covered and k not in _KATAKANA_STOPWORDS
     })
     names = Counter({
         n: v for n, v in names.items()
