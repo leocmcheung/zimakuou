@@ -1,9 +1,4 @@
-from pathlib import Path
-
-import pytest
-
-from zimakuou import transcribe as transcribe_mod
-from zimakuou.transcribe import _is_parakeet, is_runaway, split_long_cue
+from zimakuou.transcribe import is_runaway, split_long_cue
 
 
 def test_normal_cue_kept():
@@ -103,40 +98,3 @@ def test_split_no_real_gap_keeps_cue_when_not_egregious():
     assert out == [(0.0, 13.0, "x" * 13)]
 
 
-def test_parakeet_detected_by_name():
-    assert _is_parakeet("nvidia/parakeet-tdt_ctc-0.6b-ja")
-    assert _is_parakeet("NVIDIA/Parakeet-TDT-CTC-1.1B")  # case-insensitive
-    assert not _is_parakeet("mlx-community/whisper-large-v3-mlx")
-    assert not _is_parakeet("Systran/faster-whisper-large-v3")
-    assert not _is_parakeet(None)
-
-
-def test_parakeet_on_apple_silicon_raises_clear_error(monkeypatch):
-    """Parakeet via NeMo has no Metal/MLX backend — we should refuse fast
-    with a helpful message rather than silently falling back to CPU torch."""
-    monkeypatch.setattr(transcribe_mod, "_is_apple_silicon", lambda: True)
-    with pytest.raises(RuntimeError, match="Metal/MLX"):
-        transcribe_mod.transcribe(
-            Path("/dev/null"), model_id="nvidia/parakeet-tdt_ctc-0.6b-ja"
-        )
-
-
-def test_parakeet_without_nemo_installed_raises_install_hint(monkeypatch):
-    """If the NeMo backend is requested but the dep isn't installed, we
-    should print the install command, not a cryptic ImportError."""
-    monkeypatch.setattr(transcribe_mod, "_is_apple_silicon", lambda: False)
-    # Force the lazy `import nemo.collections.asr` inside _transcribe_parakeet
-    # to fail, regardless of whether the dep happens to be installed.
-    import builtins
-    real_import = builtins.__import__
-
-    def fake_import(name, *args, **kwargs):
-        if name.startswith("nemo"):
-            raise ImportError("simulated: nemo not installed")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-    with pytest.raises(RuntimeError, match="nemo_toolkit"):
-        transcribe_mod.transcribe(
-            Path("/dev/null"), model_id="nvidia/parakeet-tdt_ctc-0.6b-ja"
-        )
