@@ -15,3 +15,8 @@ dependencies = []
 [tool.setuptools.packages.find]
 include = ["zimakuou*"]
 exclude = ["tests*"]
+
+# Ship the JLPT katakana stopword list with the package so non-editable
+# installs still find it. Editable installs read directly from the source.
+[tool.setuptools.package-data]
+"zimakuou.data" = ["*.txt"]

@@ -59,27 +59,48 @@ _NAME_STOPWORDS = {
     "おれ", "うち", "みんな", "ども", "皆",
 }
 
-# Common katakana loanwords that pass the ≥4-char regex but aren't worth
-# glossarying — every Japanese audience knows them, and listing them just
-# wastes prompt budget. Edit per-project if a show legitimately centres
-# on one of these (e.g. an America-focused travel show wanting アメリカ
-# tracked as a recurring topic).
-_KATAKANA_STOPWORDS = {
-    # Countries / regions
-    "アメリカ", "ヨーロッパ", "アフリカ", "イギリス", "フランス", "イタリア",
-    "スペイン", "オランダ", "ベルギー", "ポルトガル", "ギリシャ", "メキシコ",
-    "ブラジル", "アルゼンチン", "オーストラリア", "ニュージーランド",
-    "インドネシア", "マレーシア", "フィリピン", "ベトナム", "シンガポール",
-    "イスラエル", "ウクライナ", "ニューヨーク"
-    # Common concepts
-    "ニュース", "スポーツ", "インターネット", "シリーズ", "バランス",
-    "パターン", "メッセージ", "システム", "スタイル", "イメージ",
-    "スケジュール", "アドバイス", "ストレス", "グループ", "メンバー",
-    "パーティー", "レストラン", "スーパー", "デパート", "マンション","ロボット"
-    # Products / tech / loanwords
-    "パソコン", "スマートフォン", "シンプル", "ナチュラル", "スマート",
-    "メディア", "アイドル","サービス","マーケット", "ソフトウェア"
+# Gap-fill: hugely common loanwords + countries that aren't in JLPT N5-N2
+# vocabulary at any level (JLPT is curriculum-scoped, not frequency-ranked).
+# The bulk of the filter comes from data/jlpt_katakana_stopwords.txt via
+# _load_jlpt_stopwords(); these are just the entries the JLPT list misses.
+# Edit per-project if a show legitimately centres on one of these (e.g. an
+# America-focused travel show wanting アメリカ tracked as a recurring topic
+# — but for that case, prefer adding it to the show's context.yaml).
+_KATAKANA_STOPWORDS_GAPFILL = {
+    # Countries / regions not in JLPT
+    "イギリス", "フランス", "イタリア", "スペイン", "オランダ", "ベルギー",
+    "ポルトガル", "ギリシャ", "メキシコ", "ブラジル", "アルゼンチン",
+    "オーストラリア", "ニュージーランド", "インドネシア", "マレーシア",
+    "フィリピン", "ベトナム", "シンガポール", "イスラエル", "ウクライナ",
+    "ニューヨーク",
+    # Common concepts / tech / loanwords not in JLPT
+    "インターネット", "システム", "スマートフォン", "スーパー", "アドバイス",
+    "アイドル", "メディア", "シンプル", "ナチュラル", "ソフトウェア",
+    "ロボット", "スピード", "プロジェクト",
 }
+
+
+def _load_jlpt_stopwords() -> set[str]:
+    """Read zimakuou/data/jlpt_katakana_stopwords.txt at import time. Returns
+    an empty set (with a warning) if the file is missing — the gap-fill set
+    still applies, so the audit degrades gracefully."""
+    data_file = Path(__file__).parent / "data" / "jlpt_katakana_stopwords.txt"
+    if not data_file.exists():
+        import warnings
+        warnings.warn(
+            f"JLPT katakana stopword file not found at {data_file}; "
+            f"glossary draft will use the inline gap-fill set only.",
+            stacklevel=2,
+        )
+        return set()
+    return {
+        line.strip()
+        for line in data_file.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
+
+_KATAKANA_STOPWORDS = _KATAKANA_STOPWORDS_GAPFILL | _load_jlpt_stopwords()
 
 KATAKANA_MIN_COUNT = 5  # need ≥5 mentions in an episode to suggest it
 NAME_MIN_COUNT = 2      # names matter even when mentioned twice
