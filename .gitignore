@@ -18,3 +18,7 @@ venv/
 # Model caches (huggingface defaults to ~/.cache, but in case anyone overrides)
 models/
 .cache/
+
+# Subtitles and output files
+*.yaml
+*.srt
