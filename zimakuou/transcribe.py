@@ -20,6 +20,13 @@ def _is_apple_silicon() -> bool:
     return sys.platform == "darwin" and platform.machine() == "arm64"
 
 
+def _is_parakeet(model_id: str | None) -> bool:
+    """Match NVIDIA NeMo Parakeet models (e.g. nvidia/parakeet-tdt_ctc-0.6b-ja).
+    Routed to a separate backend because NeMo's API + transducer decoding
+    is unrelated to whisper's."""
+    return model_id is not None and "parakeet" in model_id.lower()
+
+
 def split_long_cue(
     start: float,
     end: float,
@@ -87,8 +94,20 @@ def transcribe(
 
     `max_cue_duration` post-splits cues longer than this (seconds) at the
     largest internal silence using word-level timestamps. Pass None to
-    disable splitting (also skips the word_timestamps decode pass)."""
-    if _is_apple_silicon():
+    disable splitting (also skips the word_timestamps decode pass).
+
+    Passing a parakeet model id (e.g. nvidia/parakeet-tdt_ctc-0.6b-ja)
+    routes to the NeMo backend instead — only supported off Apple Silicon
+    since NeMo has no Metal path."""
+    if _is_parakeet(model_id):
+        if _is_apple_silicon():
+            raise RuntimeError(
+                f"{model_id}: NeMo Parakeet has no Metal/MLX backend. "
+                f"On Apple Silicon use the default MLX whisper (omit --asr-model). "
+                f"Running NeMo here would fall back to CPU PyTorch — much slower."
+            )
+        segs = _transcribe_parakeet(audio, model_id, initial_prompt, max_cue_duration)
+    elif _is_apple_silicon():
         segs = _transcribe_mlx(audio, model_id or DEFAULT_MLX_MODEL, initial_prompt, max_cue_duration)
     else:
         segs = _transcribe_ct2(audio, model_id or DEFAULT_CT2_MODEL, initial_prompt, max_cue_duration)
@@ -194,6 +213,79 @@ def _transcribe_ct2(
             out.extend(split_long_cue(start, end, text, words, max_cue_duration))
         # Snap to 100% in case the last segment ends slightly before info.duration.
         pbar.update(max(0, round(info.duration) - round(last_end)))
+    return out
+
+
+def _transcribe_parakeet(
+    audio: Path,
+    model_id: str,
+    initial_prompt: str | None,
+    max_cue_duration: float | None,
+) -> list[tuple[float, float, str]]:
+    """Optional backend: NVIDIA NeMo Parakeet (transducer). Trades whisper's
+    `initial_prompt` biasing for less BGM hallucination — transducer models
+    tend to *skip* non-speech rather than fabricate text over it.
+
+    Install: `pip install nemo_toolkit[asr]` (heavy: ~1-2 GB of deps).
+    Expects CUDA; CPU works but is slow. Targets NeMo ≥2.x where
+    `transcribe(..., timestamps=True)` returns Hypothesis objects with a
+    `.timestamp` dict containing 'segment' and 'word' keys."""
+    try:
+        import nemo.collections.asr as nemo_asr
+    except ImportError as e:
+        raise RuntimeError(
+            f"{model_id} requires NeMo, which is not installed. Run:\n"
+            f"    pip install nemo_toolkit[asr]\n"
+            f"(heavy: pulls torch, lightning, hydra, etc. — ~1-2 GB)"
+        ) from e
+
+    if initial_prompt:
+        print(
+            "[parakeet] note: --context's initial_prompt is ignored "
+            "(transducer models don't accept text priors). Show vocab is "
+            "still enforced post-translation by the glossary pass.",
+            file=sys.stderr,
+        )
+
+    asr_model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_id)
+    results = asr_model.transcribe([str(audio)], timestamps=True)
+    if not results:
+        return []
+
+    hyp = results[0]
+    # Hypothesis can be an object (attribute access) or a dict depending on
+    # NeMo version. Normalise.
+    timestamp = getattr(hyp, "timestamp", None) or (
+        hyp.get("timestamp") if isinstance(hyp, dict) else None
+    )
+    full_text = getattr(hyp, "text", None) or (
+        hyp.get("text") if isinstance(hyp, dict) else ""
+    )
+
+    if not timestamp or not isinstance(timestamp, dict):
+        # No segment timestamps — emit a single cue spanning the audio.
+        return [(0.0, 0.0, full_text)] if full_text else []
+
+    segments = timestamp.get("segment") or []
+    word_ts = timestamp.get("word") or []
+
+    out = []
+    for seg in segments:
+        start = float(seg["start"])
+        end = float(seg["end"])
+        text = (seg.get("segment") or seg.get("text") or "").strip()
+        if not text:
+            continue
+        if max_cue_duration is None or end - start <= max_cue_duration:
+            out.append((start, end, text))
+            continue
+        # Filter words within this segment's bounds for splitting.
+        words = [
+            (float(w["start"]), float(w["end"]), w.get("word") or w.get("text") or "")
+            for w in word_ts
+            if start - 0.01 <= float(w["start"]) and float(w["end"]) <= end + 0.01
+        ]
+        out.extend(split_long_cue(start, end, text, words, max_cue_duration))
     return out
 
 
