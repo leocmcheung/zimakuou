@@ -10,8 +10,11 @@ tqdm>=4.66.0
 mlx-whisper>=0.4.0; sys_platform == "darwin" and platform_machine == "arm64"
 mlx-lm>=0.18.0;     sys_platform == "darwin" and platform_machine == "arm64"
 
-# Windows: faster-whisper for ASR.
+# Windows: faster-whisper for ASR. NeMo is also installed so the optional
+# Parakeet backend works out-of-the-box on CUDA — opt in by passing
+# --asr-model nvidia/parakeet-tdt_ctc-0.6b-ja.
 faster-whisper>=1.0.3; sys_platform == "win32"
+nemo_toolkit[asr]>=2.0.0; sys_platform == "win32"
 
 # llama.cpp serves the Sakura GGUF on both platforms. Builds with Metal on
 # macOS and CUDA/CPU on Windows by default.
