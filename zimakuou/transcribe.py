@@ -115,12 +115,18 @@ def _transcribe_mlx(
     # mlx-whisper has an internal tqdm frame-progress bar, but it's only
     # shown when verbose is explicitly False (verbose=None → no bar AND
     # no text; verbose=True → text segments instead of a bar).
+    #
+    # condition_on_previous_text=False breaks the cue-to-cue context chain
+    # that lets one bad cue poison the next — the classic "ピピピピ" /
+    # "ほほほほ" stuck-loop pattern. We re-enforce show vocab via the
+    # glossary post-pass anyway, so we don't need whisper's auto-context.
     result = mlx_whisper.transcribe(
         str(audio),
         path_or_hf_repo=model_id,
         language="ja",
         word_timestamps=max_cue_duration is not None,
         initial_prompt=initial_prompt or None,
+        condition_on_previous_text=False,
         verbose=False,
     )
     out = []
@@ -151,12 +157,18 @@ def _transcribe_ct2(
 
     device, compute_type = _ct2_device()
     model = WhisperModel(model_id, device=device, compute_type=compute_type)
+    # Tighter Silero VAD than the defaults: anime/news mixes have dense BGM
+    # that the default threshold (0.5) decodes as speech. 0.6 raises the
+    # bar; 700ms min silence means we trust short pauses less.
+    # condition_on_previous_text=False — see _transcribe_mlx for the why.
     segments, info = model.transcribe(
         str(audio),
         language="ja",
         beam_size=5,
         vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=700, threshold=0.6),
         initial_prompt=initial_prompt or None,
+        condition_on_previous_text=False,
         word_timestamps=max_cue_duration is not None,
     )
     # faster-whisper returns a generator over segments. Drive it through
