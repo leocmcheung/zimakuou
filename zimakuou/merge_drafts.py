@@ -35,7 +35,7 @@ import yaml
 from .audit import find_candidates
 from .context import Context
 
-MIN_MENTIONS = 3
+MIN_MENTIONS = 10
 
 # Note format in drafts: `note: "21×"`. Captures the integer.
 _COUNT_RE = re.compile(r"(\d+)\s*[×x]")
