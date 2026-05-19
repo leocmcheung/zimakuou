@@ -70,19 +70,19 @@ _KATAKANA_STOPWORDS = {
     "スペイン", "オランダ", "ベルギー", "ポルトガル", "ギリシャ", "メキシコ",
     "ブラジル", "アルゼンチン", "オーストラリア", "ニュージーランド",
     "インドネシア", "マレーシア", "フィリピン", "ベトナム", "シンガポール",
-    "イスラエル",
+    "イスラエル", "ウクライナ", "ニューヨーク"
     # Common concepts
     "ニュース", "スポーツ", "インターネット", "シリーズ", "バランス",
     "パターン", "メッセージ", "システム", "スタイル", "イメージ",
     "スケジュール", "アドバイス", "ストレス", "グループ", "メンバー",
-    "パーティー", "レストラン", "スーパー", "デパート", "マンション",
+    "パーティー", "レストラン", "スーパー", "デパート", "マンション","ロボット"
     # Products / tech / loanwords
     "パソコン", "スマートフォン", "シンプル", "ナチュラル", "スマート",
-    "メディア", "アイドル",
+    "メディア", "アイドル","サービス","マーケット", "ソフトウェア"
 }
 
-KATAKANA_MIN_COUNT = 3  # need ≥3 mentions in an episode to suggest it
-NAME_MIN_COUNT = 1      # names matter even when mentioned once
+KATAKANA_MIN_COUNT = 5  # need ≥5 mentions in an episode to suggest it
+NAME_MIN_COUNT = 2      # names matter even when mentioned twice
 
 
 def find_candidates(
