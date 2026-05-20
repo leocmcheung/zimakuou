@@ -6,8 +6,8 @@ from pathlib import Path
 
 import srt
 
-DEFAULT_MLX_MODEL = "mlx-community/whisper-large-v3-mlx"
-DEFAULT_CT2_MODEL = "Systran/faster-whisper-large-v3"
+DEFAULT_MLX_MODEL = "mlx-community/whisper-large-v3-turbo"
+DEFAULT_CT2_MODEL = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
 
 # Whisper can emit cues spanning a full conversation turn (20-30s) when speech
 # is continuous. We post-split anything longer than this at the largest inter-
