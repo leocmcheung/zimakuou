@@ -21,7 +21,9 @@ def main():
         default=None,
         help=(
             "Translator: GGUF file path, HF GGUF repo id, or an MLX repo id. "
-            "Defaults to SakuraLLM/Sakura-14B-Qwen2.5-v1.0-GGUF (auto-downloads)."
+            "Defaults to SakuraLLM/Sakura-7B-Qwen2.5-v1.0-GGUF (auto-downloads). "
+            "Pass SakuraLLM/Sakura-14B-Qwen2.5-v1.0-GGUF for higher quality at "
+            "~4-5× slower throughput on VRAM-constrained GPUs."
         ),
     )
     parser.add_argument(
@@ -46,8 +48,9 @@ def main():
         default=-1,
         help=(
             "How many transformer blocks to offload to GPU (llama.cpp/GGUF only; "
-            "ignored by MLX). -1 = all (default). Drop to a partial count on "
-            "VRAM-constrained GPUs, e.g. 35 for Sakura-14B Q4_K_M on an 8 GB card."
+            "ignored by MLX). -1 = all (default) — fits the default Sakura-7B "
+            "IQ4_XS on 8 GB VRAM. Drop to e.g. 35 if you switch --llm to "
+            "Sakura-14B Q4_K_M (~8.4 GB) on a VRAM-constrained card."
         ),
     )
     args = parser.parse_args()

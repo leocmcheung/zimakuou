@@ -14,8 +14,8 @@ from ._prompt import (
 if TYPE_CHECKING:
     from ..context import GlossaryEntry
 
-DEFAULT_REPO = "SakuraLLM/Sakura-14B-Qwen2.5-v1.0-GGUF"
-DEFAULT_FILE = "sakura-14b-qwen2.5-v1.0-q4km.gguf"
+DEFAULT_REPO = "SakuraLLM/Sakura-7B-Qwen2.5-v1.0-GGUF"
+DEFAULT_FILE = "sakura-7b-qwen2.5-v1.0-iq4xs.gguf"
 
 
 def _looks_like_hf_repo(model: str) -> bool:
@@ -35,9 +35,9 @@ class LlamaTranslator(Translator):
 
         # n_gpu_layers=-1 offloads every layer to Metal (Mac) / CUDA (Windows).
         # Without it llama.cpp runs entirely on CPU even when built with GPU
-        # support, which on a 14B model is ~10× slower. On VRAM-constrained
-        # GPUs (e.g. 8 GB laptops vs Sakura-14B's 8.4 GB) pass a partial count
-        # so the remaining blocks run on CPU instead of OOMing at load.
+        # support, which on a 7B model is ~5× slower. The default Sakura-7B
+        # IQ4_XS (~4.3 GB) fits entirely on 8 GB cards; pass a partial count
+        # (e.g. 35) only if you switch --llm to Sakura-14B Q4_K_M (~8.4 GB).
         kwargs = dict(n_ctx=4096, n_gpu_layers=n_gpu_layers, verbose=False)
 
         target = model or DEFAULT_REPO

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 # Project default — Sakura is fine-tuned for JP→ZH light-novel/galge/anime
 # dialogue. Resolving the default *here* (not inside a backend) is load-bearing
 # so style detection sees the real model name when `--llm` is omitted.
-DEFAULT_MODEL = "SakuraLLM/Sakura-14B-Qwen2.5-v1.0-GGUF"
+DEFAULT_MODEL = "SakuraLLM/Sakura-7B-Qwen2.5-v1.0-GGUF"
 
 
 def _is_gguf(model: str) -> bool:

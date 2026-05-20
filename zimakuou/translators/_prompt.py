@@ -28,8 +28,9 @@ SYSTEM = (
     "or untranslatable, transliterate naturally."
 )
 
-# Verbatim from SakuraLLM/utils/consts.py for Sakura-14B-Qwen2.5-v1.0.
-# Do not edit — the model was trained on this exact string.
+# Verbatim from SakuraLLM/utils/consts.py for the Sakura v1.0 release
+# (Sakura-7B and Sakura-14B Qwen2.5 share this exact system prompt).
+# Do not edit — the model was trained on this string.
 SAKURA_SYSTEM = (
     "你是一个轻小说翻译模型，可以流畅通顺地使用给定的术语表以日本轻小说的风格将日文翻译成简体中文，"
     "并联系上下文正确使用人称代词，不擅自添加原文中没有的代词。"
