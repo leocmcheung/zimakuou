@@ -166,7 +166,7 @@ def _transcribe_ct2(
         language="ja",
         beam_size=5,
         vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=700, threshold=0.6),
+        vad_parameters=dict(min_silence_duration_ms=500, threshold=0.6),
         initial_prompt=initial_prompt or None,
         condition_on_previous_text=False,
         word_timestamps=max_cue_duration is not None,
