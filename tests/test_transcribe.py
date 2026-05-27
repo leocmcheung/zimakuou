@@ -41,6 +41,34 @@ def test_empty_text_dropped():
     assert is_runaway("   ", 1.0)
 
 
+def test_repeated_bigram_pattern_dropped():
+    # Real failure: "自動自動自動..." — neither 自 nor 動 exceeds 50%
+    # individually, but the 2-char unit tiles the whole string.
+    assert is_runaway("自動" * 30, 15.0)
+    # Also catches 3-char and 4-char repeating units
+    assert is_runaway("おはよ" * 15, 5.0)
+    assert is_runaway("ありがと" * 12, 5.0)
+
+
+def test_repeating_pattern_needs_enough_text():
+    # Short text that happens to repeat shouldn't be flagged
+    assert not is_runaway("自動自動", 2.0)
+
+
+def test_micro_cue_spam_dropped():
+    # Single-char cues in <0.3s — decoder sputtering after a stuck loop
+    assert is_runaway("自", 0.04)
+    assert is_runaway("動", 0.1)
+    assert is_runaway("自", 0.29)
+
+
+def test_short_interjection_not_micro_cue():
+    # "うん" at 0.5s is a real interjection, not spam
+    assert not is_runaway("うん", 0.5)
+    # Even very short real speech: "え" at 0.4s
+    assert not is_runaway("え", 0.4)
+
+
 def test_split_short_cue_untouched():
     # 5s cue with a 12s budget — no reason to split.
     words = [(0.0, 1.0, "こん"), (1.2, 2.0, "にちは"), (3.0, 5.0, "皆さん")]

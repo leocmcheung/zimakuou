@@ -53,6 +53,21 @@ def split_long_cue(
     )
 
 
+def _is_repeating_pattern(text: str) -> bool:
+    """True if `text` is mostly a short unit repeated many times,
+    e.g. "自動自動自動..." or "ほほほほ..."."""
+    n = len(text)
+    for unit_len in range(1, 5):
+        unit = text[:unit_len]
+        repeats = n // unit_len
+        if repeats < 3:
+            continue
+        reconstructed = unit * repeats
+        if sum(a == b for a, b in zip(text, reconstructed)) / n > 0.8:
+            return True
+    return False
+
+
 def is_runaway(text: str, duration: float) -> bool:
     """Detect classic Whisper failure modes worth dropping:
 
@@ -62,9 +77,15 @@ def is_runaway(text: str, duration: float) -> bool:
        a multi-second window is the model getting stuck.
     2. **Repeated-character noise** — e.g. "ほほほほほ..." or "ピピピピ...".
        If a single character makes up >50% of a long string, it's noise.
+    3. **Repeated n-gram pattern** — e.g. "自動自動自動..." where no single
+       char exceeds 50% but a short unit tiles the entire string.
+    4. **Micro-cue spam** — ≤2 chars in <0.3s, the decoder sputtering
+       fragments after a stuck loop. Real speech doesn't produce these.
     """
     text = text.strip()
     if not text:
+        return True
+    if len(text) <= 2 and duration < 0.3:
         return True
     if duration > 5.0 and len(text) / duration < 1.0:
         return True
@@ -72,6 +93,8 @@ def is_runaway(text: str, duration: float) -> bool:
         most_common_count = Counter(text).most_common(1)[0][1]
         if most_common_count / len(text) > 0.5:
             return True
+    if len(text) > 8 and _is_repeating_pattern(text):
+        return True
     return False
 
 
