@@ -1,4 +1,5 @@
 import platform
+import re
 import sys
 from collections import Counter
 from datetime import timedelta
@@ -13,11 +14,38 @@ DEFAULT_CT2_MODEL = "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
 # is continuous. We post-split anything longer than this at the largest inter-
 # word silence so the SRT is readable on screen. 12s is in the middle of the
 # 10-15s sweet spot for subtitle line duration.
-DEFAULT_MAX_CUE_DURATION = 12.0
+DEFAULT_MAX_CUE_DURATION = 10.0
 
 
 def _is_apple_silicon() -> bool:
     return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+_SENTENCE_BOUNDARY = re.compile(r"[。．！？]")
+
+
+def _find_boundary_split(words: list[tuple[float, float, str]]) -> int | None:
+    """Return the index of the last word that ends a sentence/clause."""
+    for i in range(len(words) - 1):
+        if i < len(words) - 1 and _SENTENCE_BOUNDARY.search(words[i][2]):
+            return i
+    return None
+
+
+def _merge_short_cues(
+    cues: list[tuple[float, float, str]],
+    max_dur: float,
+) -> list[tuple[float, float, str]]:
+    if not cues:
+        return cues
+    result = [cues[0]]
+    for start, end, text in cues[1:]:
+        prev_start, prev_end, prev_text = result[-1]
+        if (end - start < 1.0 or len(text) <= 2) and end - prev_start <= max_dur:
+            result[-1] = (prev_start, end, prev_text + text)
+        else:
+            result.append((start, end, text))
+    return result
 
 
 def split_long_cue(
@@ -27,20 +55,32 @@ def split_long_cue(
     words: list[tuple[float, float, str]],
     max_dur: float,
 ) -> list[tuple[float, float, str]]:
-    """Recursively split a cue at the largest internal silence gap until
-    every piece is ≤ max_dur. `words` is a list of (start, end, text) tuples
-    from whisper's word_timestamps=True output.
+    """Recursively split a cue, preferring sentence/clause boundaries,
+    falling back to the largest silence gap.
 
-    Falls back to leaving the cue intact if there are no word timestamps to
-    split on, or if no real gap exists (everything tightly packed) and the
-    cue isn't egregiously long."""
-    if end - start <= max_dur or len(words) < 2:
+    `words` is a list of (start, end, text) tuples from whisper's
+    word_timestamps=True output.
+
+    Falls back to leaving the cue intact if no clean split point exists."""
+    if len(words) < 2:
         return [(start, end, text)]
+
+    punct_idx = _find_boundary_split(words)
+    if punct_idx is not None:
+        left_words = words[: punct_idx + 1]
+        right_words = words[punct_idx + 1 :]
+        left_text = "".join(w[2] for w in left_words).strip()
+        right_text = "".join(w[2] for w in right_words).strip()
+        return (
+            split_long_cue(left_words[0][0], left_words[-1][1], left_text, left_words, max_dur)
+            + split_long_cue(right_words[0][0], right_words[-1][1], right_text, right_words, max_dur)
+        )
+
+    if end - start <= max_dur:
+        return [(start, end, text)]
+
     gaps = [(words[i + 1][0] - words[i][1], i) for i in range(len(words) - 1)]
     max_gap, split_idx = max(gaps)
-    # No real silence anywhere — don't force-split mid-utterance unless the
-    # cue is way over budget (then accept an awkward split rather than a
-    # 30s wall of text).
     if max_gap < 0.05 and (end - start) < max_dur * 1.5:
         return [(start, end, text)]
     left_words = words[: split_idx + 1]
@@ -115,6 +155,8 @@ def transcribe(
         segs = _transcribe_mlx(audio, model_id or DEFAULT_MLX_MODEL, initial_prompt, max_cue_duration)
     else:
         segs = _transcribe_ct2(audio, model_id or DEFAULT_CT2_MODEL, initial_prompt, max_cue_duration)
+
+    segs = _merge_short_cues(segs, max_cue_duration or DEFAULT_MAX_CUE_DURATION)
 
     return [
         srt.Subtitle(
