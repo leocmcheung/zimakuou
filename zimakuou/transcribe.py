@@ -76,12 +76,9 @@ def split_long_cue(
             + split_long_cue(right_words[0][0], right_words[-1][1], right_text, right_words, max_dur)
         )
 
-    if end - start <= max_dur:
-        return [(start, end, text)]
-
     gaps = [(words[i + 1][0] - words[i][1], i) for i in range(len(words) - 1)]
     max_gap, split_idx = max(gaps)
-    if max_gap < 0.05 and (end - start) < max_dur * 1.5:
+    if max_gap < 0.05:
         return [(start, end, text)]
     left_words = words[: split_idx + 1]
     right_words = words[split_idx + 1 :]

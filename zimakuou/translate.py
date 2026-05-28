@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
@@ -5,8 +6,45 @@ import srt
 from tqdm import tqdm
 
 from .context import Context
+from .transcribe import _is_repeating_pattern
 from .translators import get_translator
 from .translators.base import Translator
+
+
+def _clean_translation(text: str, fallback: str) -> str:
+    """Strip repetitive hallucination suffix from LLM output (e.g.
+    "今天流了很多汗，櫻怪怪怪怪怪怪怪…" → "今天流了很多汗，櫻").
+    Falls back to the original Japanese if nothing meaningful remains."""
+    n = len(text)
+    if n < 10:
+        return text
+
+    cleaned = text
+
+    if n > 20:
+        mc, mc_count = Counter(text).most_common(1)[0]
+        if mc_count / n > 0.5:
+            run = mc * 10
+            idx = text.find(run)
+            if idx >= 0:
+                cleaned = text[:idx].rstrip(mc)
+
+    if len(cleaned) > 8 and _is_repeating_pattern(cleaned):
+        for unit_len in range(1, 5):
+            found = False
+            for i in range(len(cleaned) - unit_len * 5):
+                unit = cleaned[i : i + unit_len]
+                if all(
+                    cleaned[j : j + unit_len] == unit
+                    for j in range(i + unit_len, i + unit_len * 5, unit_len)
+                ):
+                    cleaned = cleaned[:i].strip()
+                    found = True
+                    break
+            if found:
+                break
+
+    return cleaned if cleaned else fallback
 
 
 def translate_subs(
@@ -42,6 +80,7 @@ def translate_subs(
         zh = translator.translate(sub.content, history)
         zh = cc.convert(zh)
         zh = ctx.apply_glossary(zh)
+        zh = _clean_translation(zh, sub.content)
         out.append(
             srt.Subtitle(index=sub.index, start=sub.start, end=sub.end, content=zh)
         )

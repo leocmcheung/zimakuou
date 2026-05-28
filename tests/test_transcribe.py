@@ -69,11 +69,10 @@ def test_short_interjection_not_micro_cue():
     assert not is_runaway("え", 0.4)
 
 
-def test_split_short_cue_untouched():
-    # 5s cue with a 12s budget — no reason to split.
+def test_split_short_cue_at_silence_gaps():
     words = [(0.0, 1.0, "こん"), (1.2, 2.0, "にちは"), (3.0, 5.0, "皆さん")]
     out = split_long_cue(0.0, 5.0, "こんにちは皆さん", words, max_dur=12.0)
-    assert out == [(0.0, 5.0, "こんにちは皆さん")]
+    assert out == [(0.0, 1.0, "こん"), (1.2, 2.0, "にちは"), (3.0, 5.0, "皆さん")]
 
 
 def test_split_long_cue_at_largest_gap():
